@@ -9,12 +9,54 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UsuariosRouteImport } from './routes/usuarios'
+import { Route as QualidadeRouteImport } from './routes/qualidade'
+import { Route as ProdutosRouteImport } from './routes/produtos'
+import { Route as ProducaoRouteImport } from './routes/producao'
+import { Route as MateriasPrimasRouteImport } from './routes/materias-primas'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as FormulacoesRouteImport } from './routes/formulacoes'
+import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as IndexRouteImport } from './routes/index'
 
+const UsuariosRoute = UsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QualidadeRoute = QualidadeRouteImport.update({
+  id: '/qualidade',
+  path: '/qualidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProdutosRoute = ProdutosRouteImport.update({
+  id: '/produtos',
+  path: '/produtos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProducaoRoute = ProducaoRouteImport.update({
+  id: '/producao',
+  path: '/producao',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MateriasPrimasRoute = MateriasPrimasRouteImport.update({
+  id: '/materias-primas',
+  path: '/materias-primas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FormulacoesRoute = FormulacoesRouteImport.update({
+  id: '/formulacoes',
+  path: '/formulacoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EstoqueRoute = EstoqueRouteImport.update({
+  id: '/estoque',
+  path: '/estoque',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,37 +67,142 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/estoque': typeof EstoqueRoute
+  '/formulacoes': typeof FormulacoesRoute
   '/login': typeof LoginRoute
+  '/materias-primas': typeof MateriasPrimasRoute
+  '/producao': typeof ProducaoRoute
+  '/produtos': typeof ProdutosRoute
+  '/qualidade': typeof QualidadeRoute
+  '/usuarios': typeof UsuariosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/estoque': typeof EstoqueRoute
+  '/formulacoes': typeof FormulacoesRoute
   '/login': typeof LoginRoute
+  '/materias-primas': typeof MateriasPrimasRoute
+  '/producao': typeof ProducaoRoute
+  '/produtos': typeof ProdutosRoute
+  '/qualidade': typeof QualidadeRoute
+  '/usuarios': typeof UsuariosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/estoque': typeof EstoqueRoute
+  '/formulacoes': typeof FormulacoesRoute
   '/login': typeof LoginRoute
+  '/materias-primas': typeof MateriasPrimasRoute
+  '/producao': typeof ProducaoRoute
+  '/produtos': typeof ProdutosRoute
+  '/qualidade': typeof QualidadeRoute
+  '/usuarios': typeof UsuariosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths:
+    | '/'
+    | '/estoque'
+    | '/formulacoes'
+    | '/login'
+    | '/materias-primas'
+    | '/producao'
+    | '/produtos'
+    | '/qualidade'
+    | '/usuarios'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/' | '/login'
+  to:
+    | '/'
+    | '/estoque'
+    | '/formulacoes'
+    | '/login'
+    | '/materias-primas'
+    | '/producao'
+    | '/produtos'
+    | '/qualidade'
+    | '/usuarios'
+  id:
+    | '__root__'
+    | '/'
+    | '/estoque'
+    | '/formulacoes'
+    | '/login'
+    | '/materias-primas'
+    | '/producao'
+    | '/produtos'
+    | '/qualidade'
+    | '/usuarios'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EstoqueRoute: typeof EstoqueRoute
+  FormulacoesRoute: typeof FormulacoesRoute
   LoginRoute: typeof LoginRoute
+  MateriasPrimasRoute: typeof MateriasPrimasRoute
+  ProducaoRoute: typeof ProducaoRoute
+  ProdutosRoute: typeof ProdutosRoute
+  QualidadeRoute: typeof QualidadeRoute
+  UsuariosRoute: typeof UsuariosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/usuarios': {
+      id: '/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof UsuariosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/qualidade': {
+      id: '/qualidade'
+      path: '/qualidade'
+      fullPath: '/qualidade'
+      preLoaderRoute: typeof QualidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/produtos': {
+      id: '/produtos'
+      path: '/produtos'
+      fullPath: '/produtos'
+      preLoaderRoute: typeof ProdutosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/producao': {
+      id: '/producao'
+      path: '/producao'
+      fullPath: '/producao'
+      preLoaderRoute: typeof ProducaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/materias-primas': {
+      id: '/materias-primas'
+      path: '/materias-primas'
+      fullPath: '/materias-primas'
+      preLoaderRoute: typeof MateriasPrimasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/formulacoes': {
+      id: '/formulacoes'
+      path: '/formulacoes'
+      fullPath: '/formulacoes'
+      preLoaderRoute: typeof FormulacoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estoque': {
+      id: '/estoque'
+      path: '/estoque'
+      fullPath: '/estoque'
+      preLoaderRoute: typeof EstoqueRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,8 +217,25 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EstoqueRoute: EstoqueRoute,
+  FormulacoesRoute: FormulacoesRoute,
   LoginRoute: LoginRoute,
+  MateriasPrimasRoute: MateriasPrimasRoute,
+  ProducaoRoute: ProducaoRoute,
+  ProdutosRoute: ProdutosRoute,
+  QualidadeRoute: QualidadeRoute,
+  UsuariosRoute: UsuariosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
