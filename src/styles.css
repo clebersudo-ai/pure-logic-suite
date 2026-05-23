@@ -29,6 +29,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -47,79 +49,83 @@
   --color-chart-5: var(--chart-5);
 }
 
-/* Industrial theme — slate steel + safety orange */
+/* Industrial ERP — clean technical corporate */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.98 0.005 240);
-  --foreground: oklch(0.20 0.02 240);
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.003 240);
+  --foreground: oklch(0.18 0.02 240);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.20 0.02 240);
+  --card-foreground: oklch(0.18 0.02 240);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.20 0.02 240);
-  --primary: oklch(0.65 0.20 45);          /* safety orange */
+  --popover-foreground: oklch(0.18 0.02 240);
+  --primary: oklch(0.62 0.18 38);            /* refined safety orange */
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.28 0.03 240);       /* steel slate */
+  --secondary: oklch(0.26 0.025 240);
   --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.95 0.01 240);
-  --muted-foreground: oklch(0.45 0.02 240);
-  --accent: oklch(0.93 0.02 240);
-  --accent-foreground: oklch(0.25 0.02 240);
-  --destructive: oklch(0.60 0.22 25);
+  --muted: oklch(0.955 0.006 240);
+  --muted-foreground: oklch(0.48 0.015 240);
+  --accent: oklch(0.94 0.012 240);
+  --accent-foreground: oklch(0.22 0.02 240);
+  --destructive: oklch(0.58 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.62 0.16 150);
+  --success: oklch(0.62 0.14 155);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.78 0.16 85);
+  --warning: oklch(0.78 0.15 80);
   --warning-foreground: oklch(0.20 0.02 240);
-  --border: oklch(0.90 0.01 240);
-  --input: oklch(0.93 0.01 240);
-  --ring: oklch(0.65 0.20 45);
-  --sidebar: oklch(0.22 0.025 240);
-  --sidebar-foreground: oklch(0.92 0.01 240);
-  --sidebar-primary: oklch(0.65 0.20 45);
+  --info: oklch(0.58 0.13 230);
+  --info-foreground: oklch(0.99 0 0);
+  --border: oklch(0.91 0.008 240);
+  --input: oklch(0.92 0.008 240);
+  --ring: oklch(0.62 0.18 38);
+  --sidebar: oklch(0.21 0.022 240);
+  --sidebar-foreground: oklch(0.94 0.008 240);
+  --sidebar-primary: oklch(0.62 0.18 38);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.30 0.03 240);
+  --sidebar-accent: oklch(0.27 0.025 240);
   --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.30 0.03 240);
-  --sidebar-ring: oklch(0.65 0.20 45);
-  --chart-1: oklch(0.65 0.20 45);
-  --chart-2: oklch(0.55 0.15 220);
-  --chart-3: oklch(0.62 0.16 150);
-  --chart-4: oklch(0.78 0.16 85);
+  --sidebar-border: oklch(0.28 0.025 240);
+  --sidebar-ring: oklch(0.62 0.18 38);
+  --chart-1: oklch(0.62 0.18 38);
+  --chart-2: oklch(0.55 0.14 220);
+  --chart-3: oklch(0.62 0.14 155);
+  --chart-4: oklch(0.78 0.15 80);
   --chart-5: oklch(0.55 0.18 290);
 }
 
 .dark {
-  --background: oklch(0.18 0.02 240);
-  --foreground: oklch(0.96 0.01 240);
-  --card: oklch(0.22 0.025 240);
-  --card-foreground: oklch(0.96 0.01 240);
-  --popover: oklch(0.22 0.025 240);
-  --popover-foreground: oklch(0.96 0.01 240);
-  --primary: oklch(0.70 0.20 45);
-  --primary-foreground: oklch(0.15 0.02 240);
-  --secondary: oklch(0.28 0.03 240);
-  --secondary-foreground: oklch(0.96 0.01 240);
-  --muted: oklch(0.26 0.02 240);
-  --muted-foreground: oklch(0.70 0.02 240);
-  --accent: oklch(0.30 0.03 240);
-  --accent-foreground: oklch(0.96 0.01 240);
+  --background: oklch(0.155 0.018 240);
+  --foreground: oklch(0.96 0.008 240);
+  --card: oklch(0.205 0.022 240);
+  --card-foreground: oklch(0.96 0.008 240);
+  --popover: oklch(0.205 0.022 240);
+  --popover-foreground: oklch(0.96 0.008 240);
+  --primary: oklch(0.68 0.18 42);
+  --primary-foreground: oklch(0.14 0.02 240);
+  --secondary: oklch(0.28 0.028 240);
+  --secondary-foreground: oklch(0.96 0.008 240);
+  --muted: oklch(0.25 0.02 240);
+  --muted-foreground: oklch(0.70 0.015 240);
+  --accent: oklch(0.30 0.028 240);
+  --accent-foreground: oklch(0.96 0.008 240);
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.65 0.16 150);
+  --success: oklch(0.66 0.15 155);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.78 0.16 85);
-  --warning-foreground: oklch(0.20 0.02 240);
+  --warning: oklch(0.78 0.16 80);
+  --warning-foreground: oklch(0.18 0.02 240);
+  --info: oklch(0.65 0.14 230);
+  --info-foreground: oklch(0.99 0 0);
   --border: oklch(0.30 0.02 240);
   --input: oklch(0.30 0.02 240);
-  --ring: oklch(0.70 0.20 45);
-  --sidebar: oklch(0.15 0.02 240);
-  --sidebar-foreground: oklch(0.92 0.01 240);
-  --sidebar-primary: oklch(0.70 0.20 45);
-  --sidebar-primary-foreground: oklch(0.15 0.02 240);
-  --sidebar-accent: oklch(0.25 0.025 240);
-  --sidebar-accent-foreground: oklch(0.96 0.01 240);
-  --sidebar-border: oklch(0.25 0.025 240);
-  --sidebar-ring: oklch(0.70 0.20 45);
+  --ring: oklch(0.68 0.18 42);
+  --sidebar: oklch(0.13 0.018 240);
+  --sidebar-foreground: oklch(0.93 0.01 240);
+  --sidebar-primary: oklch(0.68 0.18 42);
+  --sidebar-primary-foreground: oklch(0.14 0.02 240);
+  --sidebar-accent: oklch(0.22 0.022 240);
+  --sidebar-accent-foreground: oklch(0.96 0.008 240);
+  --sidebar-border: oklch(0.22 0.022 240);
+  --sidebar-ring: oklch(0.68 0.18 42);
 }
 
 @layer base {
@@ -127,7 +133,12 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Inter", sans-serif;
+    font-feature-settings: "cv11", "ss01";
   }
   h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
+  /* Subtle scrollbars for ERP feel */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--muted-foreground) 30%, transparent); border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--muted-foreground) 50%, transparent); }
 }
