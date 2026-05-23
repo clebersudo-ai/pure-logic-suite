@@ -3,12 +3,13 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { AppLayout } from "@/components/AppLayout";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, DataCard, FormField, EmptyState, useDialog,
   Button, Input, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Plus, Pencil, Trash2 } from "@/components/crud-ui";
 import { Badge } from "@/components/ui/badge";
+import { Search, Filter, X } from "lucide-react";
 
 export const Route = createFileRoute("/materias-primas")({
   component: () => (<RequireAuth><AppLayout><MateriasPrimas /></AppLayout></RequireAuth>),
@@ -32,6 +33,22 @@ function MateriasPrimas() {
   });
   const dlg = useDialog();
   const [edit, setEdit] = useState<Partial<MP> | null>(null);
+  const [q, setQ] = useState("");
+  const [onlyLow, setOnlyLow] = useState(false);
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return data.filter((m) => {
+      if (onlyLow && !(Number(m.estoque_atual) <= Number(m.estoque_minimo))) return false;
+      if (!term) return true;
+      return (
+        m.nome.toLowerCase().includes(term) ||
+        m.codigo_interno.toLowerCase().includes(term) ||
+        (m.fornecedor ?? "").toLowerCase().includes(term) ||
+        (m.lote_fornecedor ?? "").toLowerCase().includes(term)
+      );
+    });
+  }, [data, q, onlyLow]);
 
   function openNew() { setEdit({ unidade: "kg", estoque_atual: 0, estoque_minimo: 0, custo_unitario: 0 }); dlg.openNew(); }
   function openEdit(m: MP) { setEdit(m); dlg.openNew(); }
