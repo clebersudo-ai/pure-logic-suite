@@ -61,6 +61,139 @@ export type Database = {
           },
         ]
       }
+      documento_anexos: {
+        Row: {
+          created_at: string
+          documento_id: string
+          enviado_por: string | null
+          enviado_por_nome: string | null
+          id: string
+          mime_type: string | null
+          nome_arquivo: string
+          observacoes: string | null
+          storage_path: string
+          tamanho_bytes: number | null
+        }
+        Insert: {
+          created_at?: string
+          documento_id: string
+          enviado_por?: string | null
+          enviado_por_nome?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo: string
+          observacoes?: string | null
+          storage_path: string
+          tamanho_bytes?: number | null
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string
+          enviado_por?: string | null
+          enviado_por_nome?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo?: string
+          observacoes?: string | null
+          storage_path?: string
+          tamanho_bytes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documento_anexos_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documento_versoes: {
+        Row: {
+          created_at: string
+          documento_id: string
+          enviado_por: string | null
+          enviado_por_nome: string | null
+          id: string
+          mime_type: string | null
+          nome_arquivo: string
+          observacoes: string | null
+          storage_path: string
+          tamanho_bytes: number | null
+          versao: number
+        }
+        Insert: {
+          created_at?: string
+          documento_id: string
+          enviado_por?: string | null
+          enviado_por_nome?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo: string
+          observacoes?: string | null
+          storage_path: string
+          tamanho_bytes?: number | null
+          versao: number
+        }
+        Update: {
+          created_at?: string
+          documento_id?: string
+          enviado_por?: string | null
+          enviado_por_nome?: string | null
+          id?: string
+          mime_type?: string | null
+          nome_arquivo?: string
+          observacoes?: string | null
+          storage_path?: string
+          tamanho_bytes?: number | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documento_versoes_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documentos: {
+        Row: {
+          categoria: string | null
+          created_at: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          status: string
+          updated_at: string
+          versao_atual: number
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          status?: string
+          updated_at?: string
+          versao_atual?: number
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          status?: string
+          updated_at?: string
+          versao_atual?: number
+        }
+        Relationships: []
+      }
       formulacoes: {
         Row: {
           created_at: string
