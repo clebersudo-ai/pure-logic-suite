@@ -20,8 +20,10 @@ import {
   FileText, Upload, Download, Eye, History, Paperclip, Search,
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
-  Building2, Filter, X, CalendarClock, Pencil,
+  Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { extractDocumentMetadata } from "@/lib/extract-document.functions";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, CartesianGrid,
