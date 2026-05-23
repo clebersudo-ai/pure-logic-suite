@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Factory, AlertTriangle, ClipboardList, DollarSign, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Factory, AlertTriangle, ClipboardList, DollarSign, TrendingUp, TrendingDown, Activity, ShieldAlert, ShieldCheck, ShieldQuestion, FileWarning, CalendarClock, ArrowRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid, Legend,
@@ -57,6 +58,46 @@ function Dashboard() {
       return { totalLitros, custoMedio, openCount: (openOrders.data ?? []).length, lowList, chart, statusCount, delta };
     },
   });
+
+  const { data: reg } = useQuery({
+    queryKey: ["dashboard-regulatorio"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("documentos")
+        .select("id, nome, categoria, orgao_emissor, responsavel, criticidade, data_validade, renovacao_obrigatoria, status")
+        .order("data_validade", { ascending: true, nullsFirst: false });
+      const docs = data ?? [];
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = (d: string | null) => {
+        if (!d) return Infinity;
+        const dt = new Date(d); dt.setHours(0, 0, 0, 0);
+        return Math.round((dt.getTime() - today.getTime()) / 86400000);
+      };
+      const enriched = docs.map((d) => {
+        const diff = days(d.data_validade as string | null);
+        let bucket: "vencido" | "critico" | "atencao" | "ativo" | "sem_validade" = "sem_validade";
+        if (d.data_validade) {
+          if (diff < 0) bucket = "vencido";
+          else if (diff <= 30) bucket = "critico";
+          else if (diff <= 90) bucket = "atencao";
+          else bucket = "ativo";
+        }
+        return { ...d, _dias: diff, _bucket: bucket };
+      });
+      const vencidos = enriched.filter((d) => d._bucket === "vencido");
+      const em30 = enriched.filter((d) => d._bucket === "critico");
+      const em90 = enriched.filter((d) => d._bucket === "atencao");
+      const renovacaoPendente = enriched.filter(
+        (d) => d.renovacao_obrigatoria && (d._bucket === "vencido" || d._bucket === "critico"),
+      );
+      const prioridades = enriched
+        .filter((d) => d._bucket === "vencido" || d._bucket === "critico" || d._bucket === "atencao")
+        .sort((a, b) => a._dias - b._dias)
+        .slice(0, 8);
+      return { vencidos, em30, em90, renovacaoPendente, prioridades, total: enriched.length };
+    },
+  });
+
 
   return (
     <div className="space-y-6">
@@ -197,9 +238,136 @@ function Dashboard() {
           )}
         </Card>
       </div>
+
+      <RegulatorioPanel reg={reg} />
     </div>
   );
 }
+
+function RegulatorioPanel({ reg }: { reg: any }) {
+  const vencidos = reg?.vencidos ?? [];
+  const em30 = reg?.em30 ?? [];
+  const em90 = reg?.em90 ?? [];
+  const renov = reg?.renovacaoPendente ?? [];
+  const prioridades = reg?.prioridades ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end justify-between">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Conformidade Regulatória
+          </div>
+          <h2 className="mt-1 text-xl font-bold">Alertas e Prioridades</h2>
+        </div>
+        <Link to="/documentos" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          Ver gestão documental <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AlertCard tone="destructive" icon={<ShieldAlert className="h-5 w-5" />} label="Vencidos" value={vencidos.length} hint="ação imediata" />
+        <AlertCard tone="danger" icon={<FileWarning className="h-5 w-5" />} label="Vencem em 30 dias" value={em30.length} hint="prioridade alta" />
+        <AlertCard tone="warning" icon={<CalendarClock className="h-5 w-5" />} label="Vencem em 90 dias" value={em90.length} hint="planejar renovação" />
+        <AlertCard tone="info" icon={<ShieldQuestion className="h-5 w-5" />} label="Renovação pendente" value={renov.length} hint="obrigatórias em risco" />
+      </div>
+
+      <Card className="p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className="h-4 w-4 text-primary" /> Painel de prioridades regulatórias
+            </h3>
+            <p className="text-xs text-muted-foreground">Documentos ordenados por proximidade do vencimento</p>
+          </div>
+          <Badge variant="outline" className="text-[10px]">
+            {prioridades.length} {prioridades.length === 1 ? "item" : "itens"}
+          </Badge>
+        </div>
+
+        {prioridades.length === 0 ? (
+          <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
+            <ShieldCheck className="mx-auto mb-2 h-6 w-6 text-success" />
+            Nenhum documento em janela crítica. Conformidade em dia.
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {prioridades.map((d: any) => {
+              const tone = d._bucket === "vencido" ? "destructive" : d._bucket === "critico" ? "danger" : "warning";
+              const label = d._bucket === "vencido"
+                ? `Vencido há ${Math.abs(d._dias)}d`
+                : `${d._dias}d restantes`;
+              const dot = tone === "destructive" ? "bg-destructive" : tone === "danger" ? "bg-destructive/70" : "bg-warning";
+              return (
+                <li key={d.id} className="flex items-center gap-3 py-2.5">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot} ring-2 ring-background`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{d.nome}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {[d.categoria, d.orgao_emissor, d.responsavel].filter(Boolean).join(" · ") || "—"}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Badge
+                      className={
+                        tone === "destructive"
+                          ? "bg-destructive text-destructive-foreground"
+                          : tone === "danger"
+                          ? "bg-destructive/15 text-destructive border border-destructive/30"
+                          : "bg-warning/20 text-warning-foreground border border-warning/40"
+                      }
+                    >
+                      {label}
+                    </Badge>
+                    {d.renovacao_obrigatoria && (
+                      <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        renovação obrigatória
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function AlertCard({
+  tone, icon, label, value, hint,
+}: {
+  tone: "destructive" | "danger" | "warning" | "info" | "success";
+  icon: React.ReactNode; label: string; value: number; hint?: string;
+}) {
+  const toneMap: Record<string, { card: string; iconBox: string; pulse: string }> = {
+    destructive: { card: "border-destructive/40 bg-destructive/5", iconBox: "bg-destructive text-destructive-foreground border-destructive", pulse: "bg-destructive" },
+    danger: { card: "border-destructive/30 bg-destructive/5", iconBox: "bg-destructive/15 text-destructive border-destructive/30", pulse: "bg-destructive/70" },
+    warning: { card: "border-warning/40 bg-warning/10", iconBox: "bg-warning/20 text-warning-foreground border-warning/40", pulse: "bg-warning" },
+    info: { card: "border-info/30 bg-info/5", iconBox: "bg-info/10 text-info border-info/20", pulse: "bg-info" },
+    success: { card: "border-success/30 bg-success/5", iconBox: "bg-success/10 text-success border-success/20", pulse: "bg-success" },
+  };
+  const t = toneMap[tone];
+  const isAlert = value > 0 && (tone === "destructive" || tone === "danger");
+  return (
+    <Card className={`relative overflow-hidden p-5 ${t.card}`}>
+      <div className="flex items-start justify-between">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${t.iconBox}`}>{icon}</div>
+        {value > 0 && (
+          <span className="relative flex h-2.5 w-2.5">
+            {isAlert && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${t.pulse} opacity-60`} />}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${t.pulse}`} />
+          </span>
+        )}
+      </div>
+      <div className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-bold tracking-tight">{value}</div>
+      {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
+    </Card>
+  );
+}
+
 
 function KpiCard({
   icon, label, value, delta, hint, accent = "primary", loading,
