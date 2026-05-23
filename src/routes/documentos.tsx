@@ -657,7 +657,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
           </div>
           <div className="sm:col-span-2">
             <FormField label="Observações">
-              <Textarea rows={3} value={f.observacoes} onChange={(e) => setF(s => ({ ...s, observacoes: e.target.value }))} />
+              <Textarea rows={3} className={aiCls("observacoes")} value={f.observacoes} onChange={(e) => setF(s => ({ ...s, observacoes: e.target.value }))} />
             </FormField>
           </div>
         </div>
