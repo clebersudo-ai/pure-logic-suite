@@ -20,8 +20,10 @@ import {
   FileText, Upload, Download, Eye, History, Paperclip, Search,
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
-  Building2, Filter, X, CalendarClock, Pencil,
+  Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { extractDocumentMetadata } from "@/lib/extract-document.functions";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, CartesianGrid,
@@ -446,6 +448,59 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
     descricao: documento?.descricao ?? "",
   });
   const [saving, setSaving] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiPreview, setAiPreview] = useState<{ kind: "pdf" | "image"; url: string } | null>(null);
+  const [aiFilled, setAiFilled] = useState<string[]>([]);
+  const aiInputRef = useRef<HTMLInputElement>(null);
+  const extract = useServerFn(extractDocumentMetadata);
+
+  function pickAiFile(file: File) {
+    if (aiPreview) URL.revokeObjectURL(aiPreview.url);
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isImg = file.type.startsWith("image/");
+    if (!isPdf && !isImg) { toast.error("Envie um PDF ou imagem para análise IA"); return; }
+    setAiFile(file);
+    setAiPreview({ kind: isPdf ? "pdf" : "image", url: URL.createObjectURL(file) });
+    setAiFilled([]);
+  }
+
+  async function runAi() {
+    if (!aiFile) { toast.error("Selecione um PDF ou imagem"); return; }
+    setAiBusy(true);
+    try {
+      const buf = await aiFile.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+      }
+      const base64 = btoa(bin);
+      const mimeType = aiFile.type || (aiFile.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+      const result = await extract({ data: { base64, mimeType, fileName: aiFile.name } });
+      const filled: string[] = [];
+      setF(prev => {
+        const next = { ...prev };
+        const keys = ["nome", "numero_documento", "orgao_emissor", "categoria", "data_emissao", "data_validade", "empresa", "responsavel", "observacoes"] as const;
+        for (const k of keys) {
+          const v = (result as any)?.[k];
+          if (v && String(v).trim()) {
+            (next as any)[k] = String(v).trim();
+            filled.push(k);
+          }
+        }
+        return next;
+      });
+      setAiFilled(filled);
+      if (filled.length === 0) toast.warning("Nenhum campo identificado. Preencha manualmente.");
+      else toast.success(`IA preencheu ${filled.length} campo(s). Revise antes de salvar.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha na análise IA");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function save() {
     if (!f.nome.trim()) { toast.error("Informe o nome do documento"); return; }
@@ -480,41 +535,100 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
     await onSaved();
   }
 
+  const aiCls = (k: string) => aiFilled.includes(k) ? "ring-1 ring-primary/50 bg-primary/5" : "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar documento" : "Novo documento regulatório"}</DialogTitle>
         </DialogHeader>
+
+        <div className="mb-4 rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Análise inteligente de documento</div>
+              <div className="text-xs text-muted-foreground">Envie um PDF ou imagem (ANVISA, CRQ, CETESB, Bombeiros, Polícia, Exército, VISA, Prefeitura, Contrato Social…) e a IA preencherá o cadastro automaticamente.</div>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div
+              onClick={() => aiInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) pickAiFile(f); }}
+              className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-border bg-muted/30 p-4 text-center hover:bg-muted/50"
+            >
+              <input ref={aiInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pickAiFile(f); e.currentTarget.value = ""; }} />
+              {aiFile ? (
+                <>
+                  <FileText className="mb-2 size-6 text-primary" />
+                  <div className="truncate text-sm font-medium">{aiFile.name}</div>
+                  <div className="text-xs text-muted-foreground">{(aiFile.size / 1024).toFixed(0)} KB · clique para trocar</div>
+                </>
+              ) : (
+                <>
+                  <Upload className="mb-2 size-6 text-muted-foreground" />
+                  <div className="text-sm font-medium">Arraste ou clique para enviar</div>
+                  <div className="text-xs text-muted-foreground">PDF, JPG ou PNG</div>
+                </>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-md border bg-background">
+              {aiPreview ? (
+                aiPreview.kind === "pdf" ? (
+                  <iframe src={aiPreview.url} className="h-[160px] w-full" title="Pré-visualização" />
+                ) : (
+                  <img src={aiPreview.url} alt="Pré-visualização" className="h-[160px] w-full object-contain" />
+                )
+              ) : (
+                <div className="flex h-[160px] items-center justify-center text-xs text-muted-foreground">Pré-visualização do documento</div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              {aiFilled.length > 0 && <span className="text-primary">✓ {aiFilled.length} campo(s) preenchidos pela IA — revise antes de salvar.</span>}
+            </div>
+            <Button type="button" size="sm" onClick={runAi} disabled={!aiFile || aiBusy}>
+              {aiBusy ? <><Loader2 className="size-4 animate-spin" /> Analisando…</> : <><Sparkles className="size-4" /> Extrair com IA</>}
+            </Button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FormField label="Nome do documento *">
-              <Input value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
+              <Input className={aiCls("nome")} value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
             </FormField>
           </div>
           <FormField label="Categoria">
-            <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+            <div className={aiCls("categoria") + " rounded-md"}>
+              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+            </div>
           </FormField>
           <FormField label="Órgão emissor">
-            <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+            <div className={aiCls("orgao_emissor") + " rounded-md"}>
+              <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+            </div>
           </FormField>
           <FormField label="Número do documento">
-            <Input value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
+            <Input className={aiCls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
           </FormField>
           <FormField label="Responsável">
-            <Input value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} placeholder="Nome do responsável" />
+            <Input className={aiCls("responsavel")} value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} placeholder="Nome do responsável" />
           </FormField>
           <FormField label="Empresa vinculada">
-            <Input value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
+            <Input className={aiCls("empresa")} value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
           </FormField>
           <FormField label="Unidade">
             <Input value={f.unidade} onChange={(e) => setF(s => ({ ...s, unidade: e.target.value }))} placeholder="Ex.: Matriz, Filial SP" />
           </FormField>
           <FormField label="Data de emissão">
-            <Input type="date" value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
+            <Input type="date" className={aiCls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
           </FormField>
           <FormField label="Validade">
-            <Input type="date" value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
+            <Input type="date" className={aiCls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
           </FormField>
           <FormField label="Criticidade">
             <Select value={f.criticidade} onValueChange={(v) => setF(s => ({ ...s, criticidade: v }))}>
@@ -543,7 +657,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
           </div>
           <div className="sm:col-span-2">
             <FormField label="Observações">
-              <Textarea rows={3} value={f.observacoes} onChange={(e) => setF(s => ({ ...s, observacoes: e.target.value }))} />
+              <Textarea rows={3} className={aiCls("observacoes")} value={f.observacoes} onChange={(e) => setF(s => ({ ...s, observacoes: e.target.value }))} />
             </FormField>
           </div>
         </div>
