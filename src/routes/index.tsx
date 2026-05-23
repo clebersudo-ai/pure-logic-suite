@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Factory, AlertTriangle, ClipboardList, DollarSign, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Factory, AlertTriangle, ClipboardList, DollarSign, TrendingUp, TrendingDown, Activity, ShieldAlert, ShieldCheck, ShieldQuestion, FileWarning, CalendarClock, ArrowRight } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid, Legend,
