@@ -7,7 +7,8 @@ import {
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean };
+const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/materias-primas", label: "Matérias-Primas", icon: FlaskConical },
   { to: "/produtos", label: "Produtos", icon: Package },
@@ -16,7 +17,7 @@ const NAV = [
   { to: "/estoque", label: "Estoque", icon: Warehouse },
   { to: "/qualidade", label: "Qualidade", icon: ShieldCheck },
   { to: "/usuarios", label: "Usuários", icon: Users, adminOnly: true },
-] as const;
+];
 
 export function AppLayout({ children }: { children?: ReactNode }) {
   const { user, signOut, hasRole, roles } = useAuth();
