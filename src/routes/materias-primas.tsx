@@ -73,18 +73,48 @@ function MateriasPrimas() {
     <>
       <PageHeader title="Matérias-Primas" subtitle="Insumos para formulação"
         action={<Button onClick={openNew}><Plus className="mr-2 h-4 w-4" />Nova</Button>} />
+
       <DataCard>
-        {data.length === 0 ? <EmptyState label="Nenhuma matéria-prima cadastrada" /> : (
+        <div className="flex flex-wrap items-center gap-2 border-b p-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por nome, código, fornecedor, lote…"
+              className="h-9 pl-9 pr-9"
+            />
+            {q && (
+              <button onClick={() => setQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant={onlyLow ? "default" : "outline"}
+            size="sm"
+            onClick={() => setOnlyLow((v) => !v)}
+            className="h-9"
+          >
+            <Filter className="mr-2 h-3.5 w-3.5" />
+            Estoque baixo
+          </Button>
+          <div className="ml-auto text-xs text-muted-foreground">
+            {filtered.length} de {data.length} {data.length === 1 ? "item" : "itens"}
+          </div>
+        </div>
+
+        {filtered.length === 0 ? <EmptyState label={data.length === 0 ? "Nenhuma matéria-prima cadastrada" : "Nenhum resultado para os filtros"} /> : (
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Código</TableHead><TableHead>Nome</TableHead><TableHead>Fornecedor</TableHead>
                 <TableHead className="text-right">Custo</TableHead><TableHead className="text-right">Estoque</TableHead>
                 <TableHead>Validade</TableHead><TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((m) => {
+              {filtered.map((m) => {
                 const baixo = Number(m.estoque_atual) <= Number(m.estoque_minimo);
                 return (
                   <TableRow key={m.id}>
