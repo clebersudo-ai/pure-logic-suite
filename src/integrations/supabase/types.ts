@@ -163,10 +163,20 @@ export type Database = {
           categoria: string | null
           created_at: string
           criado_por: string | null
+          criticidade: string
+          data_emissao: string | null
+          data_validade: string | null
           descricao: string | null
+          empresa: string | null
           id: string
           nome: string
+          numero_documento: string | null
+          observacoes: string | null
+          orgao_emissor: string | null
+          renovacao_obrigatoria: boolean
+          responsavel: string | null
           status: string
+          unidade: string | null
           updated_at: string
           versao_atual: number
         }
@@ -174,10 +184,20 @@ export type Database = {
           categoria?: string | null
           created_at?: string
           criado_por?: string | null
+          criticidade?: string
+          data_emissao?: string | null
+          data_validade?: string | null
           descricao?: string | null
+          empresa?: string | null
           id?: string
           nome: string
+          numero_documento?: string | null
+          observacoes?: string | null
+          orgao_emissor?: string | null
+          renovacao_obrigatoria?: boolean
+          responsavel?: string | null
           status?: string
+          unidade?: string | null
           updated_at?: string
           versao_atual?: number
         }
@@ -185,10 +205,20 @@ export type Database = {
           categoria?: string | null
           created_at?: string
           criado_por?: string | null
+          criticidade?: string
+          data_emissao?: string | null
+          data_validade?: string | null
           descricao?: string | null
+          empresa?: string | null
           id?: string
           nome?: string
+          numero_documento?: string | null
+          observacoes?: string | null
+          orgao_emissor?: string | null
+          renovacao_obrigatoria?: boolean
+          responsavel?: string | null
           status?: string
+          unidade?: string | null
           updated_at?: string
           versao_atual?: number
         }
