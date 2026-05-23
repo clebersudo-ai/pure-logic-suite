@@ -535,16 +535,71 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
     await onSaved();
   }
 
+  const aiCls = (k: string) => aiFilled.includes(k) ? "ring-1 ring-primary/50 bg-primary/5" : "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar documento" : "Novo documento regulatório"}</DialogTitle>
         </DialogHeader>
+
+        <div className="mb-4 rounded-lg border border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Análise inteligente de documento</div>
+              <div className="text-xs text-muted-foreground">Envie um PDF ou imagem (ANVISA, CRQ, CETESB, Bombeiros, Polícia, Exército, VISA, Prefeitura, Contrato Social…) e a IA preencherá o cadastro automaticamente.</div>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div
+              onClick={() => aiInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) pickAiFile(f); }}
+              className="flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-border bg-muted/30 p-4 text-center hover:bg-muted/50"
+            >
+              <input ref={aiInputRef} type="file" accept=".pdf,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) pickAiFile(f); e.currentTarget.value = ""; }} />
+              {aiFile ? (
+                <>
+                  <FileText className="mb-2 size-6 text-primary" />
+                  <div className="truncate text-sm font-medium">{aiFile.name}</div>
+                  <div className="text-xs text-muted-foreground">{(aiFile.size / 1024).toFixed(0)} KB · clique para trocar</div>
+                </>
+              ) : (
+                <>
+                  <Upload className="mb-2 size-6 text-muted-foreground" />
+                  <div className="text-sm font-medium">Arraste ou clique para enviar</div>
+                  <div className="text-xs text-muted-foreground">PDF, JPG ou PNG</div>
+                </>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-md border bg-background">
+              {aiPreview ? (
+                aiPreview.kind === "pdf" ? (
+                  <iframe src={aiPreview.url} className="h-[160px] w-full" title="Pré-visualização" />
+                ) : (
+                  <img src={aiPreview.url} alt="Pré-visualização" className="h-[160px] w-full object-contain" />
+                )
+              ) : (
+                <div className="flex h-[160px] items-center justify-center text-xs text-muted-foreground">Pré-visualização do documento</div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              {aiFilled.length > 0 && <span className="text-primary">✓ {aiFilled.length} campo(s) preenchidos pela IA — revise antes de salvar.</span>}
+            </div>
+            <Button type="button" size="sm" onClick={runAi} disabled={!aiFile || aiBusy}>
+              {aiBusy ? <><Loader2 className="size-4 animate-spin" /> Analisando…</> : <><Sparkles className="size-4" /> Extrair com IA</>}
+            </Button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FormField label="Nome do documento *">
-              <Input value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
+              <Input className={aiCls("nome")} value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
             </FormField>
           </div>
           <FormField label="Categoria">
