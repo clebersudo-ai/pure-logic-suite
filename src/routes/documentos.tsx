@@ -603,28 +603,32 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
             </FormField>
           </div>
           <FormField label="Categoria">
-            <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+            <div className={aiCls("categoria") + " rounded-md"}>
+              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+            </div>
           </FormField>
           <FormField label="Órgão emissor">
-            <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+            <div className={aiCls("orgao_emissor") + " rounded-md"}>
+              <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+            </div>
           </FormField>
           <FormField label="Número do documento">
-            <Input value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
+            <Input className={aiCls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
           </FormField>
           <FormField label="Responsável">
-            <Input value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} placeholder="Nome do responsável" />
+            <Input className={aiCls("responsavel")} value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} placeholder="Nome do responsável" />
           </FormField>
           <FormField label="Empresa vinculada">
-            <Input value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
+            <Input className={aiCls("empresa")} value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
           </FormField>
           <FormField label="Unidade">
             <Input value={f.unidade} onChange={(e) => setF(s => ({ ...s, unidade: e.target.value }))} placeholder="Ex.: Matriz, Filial SP" />
           </FormField>
           <FormField label="Data de emissão">
-            <Input type="date" value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
+            <Input type="date" className={aiCls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
           </FormField>
           <FormField label="Validade">
-            <Input type="date" value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
+            <Input type="date" className={aiCls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
           </FormField>
           <FormField label="Criticidade">
             <Select value={f.criticidade} onValueChange={(v) => setF(s => ({ ...s, criticidade: v }))}>
