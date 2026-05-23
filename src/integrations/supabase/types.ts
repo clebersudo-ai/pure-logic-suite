@@ -14,16 +14,341 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      controle_qualidade: {
+        Row: {
+          analista_id: string | null
+          aparencia: string | null
+          created_at: string
+          data_analise: string | null
+          id: string
+          observacoes: string | null
+          ordem_producao_id: string
+          ph: number | null
+          status: Database["public"]["Enums"]["qualidade_status"]
+          viscosidade: number | null
+        }
+        Insert: {
+          analista_id?: string | null
+          aparencia?: string | null
+          created_at?: string
+          data_analise?: string | null
+          id?: string
+          observacoes?: string | null
+          ordem_producao_id: string
+          ph?: number | null
+          status?: Database["public"]["Enums"]["qualidade_status"]
+          viscosidade?: number | null
+        }
+        Update: {
+          analista_id?: string | null
+          aparencia?: string | null
+          created_at?: string
+          data_analise?: string | null
+          id?: string
+          observacoes?: string | null
+          ordem_producao_id?: string
+          ph?: number | null
+          status?: Database["public"]["Enums"]["qualidade_status"]
+          viscosidade?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "controle_qualidade_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      formulacoes: {
+        Row: {
+          created_at: string
+          id: string
+          materia_prima_id: string
+          percentual: number
+          produto_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          materia_prima_id: string
+          percentual: number
+          produto_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          materia_prima_id?: string
+          percentual?: number
+          produto_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "formulacoes_materia_prima_id_fkey"
+            columns: ["materia_prima_id"]
+            isOneToOne: false
+            referencedRelation: "materias_primas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "formulacoes_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      materias_primas: {
+        Row: {
+          codigo_interno: string
+          created_at: string
+          custo_unitario: number
+          estoque_atual: number
+          estoque_minimo: number
+          fornecedor: string | null
+          id: string
+          lote_fornecedor: string | null
+          nome: string
+          unidade: string
+          updated_at: string
+          validade: string | null
+        }
+        Insert: {
+          codigo_interno: string
+          created_at?: string
+          custo_unitario?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          fornecedor?: string | null
+          id?: string
+          lote_fornecedor?: string | null
+          nome: string
+          unidade?: string
+          updated_at?: string
+          validade?: string | null
+        }
+        Update: {
+          codigo_interno?: string
+          created_at?: string
+          custo_unitario?: number
+          estoque_atual?: number
+          estoque_minimo?: number
+          fornecedor?: string | null
+          id?: string
+          lote_fornecedor?: string | null
+          nome?: string
+          unidade?: string
+          updated_at?: string
+          validade?: string | null
+        }
+        Relationships: []
+      }
+      movimentacoes_estoque: {
+        Row: {
+          created_at: string
+          id: string
+          materia_prima_id: string
+          motivo: string | null
+          ordem_producao_id: string | null
+          quantidade: number
+          tipo: Database["public"]["Enums"]["movimento_tipo"]
+          usuario_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          materia_prima_id: string
+          motivo?: string | null
+          ordem_producao_id?: string | null
+          quantidade: number
+          tipo: Database["public"]["Enums"]["movimento_tipo"]
+          usuario_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          materia_prima_id?: string
+          motivo?: string | null
+          ordem_producao_id?: string | null
+          quantidade?: number
+          tipo?: Database["public"]["Enums"]["movimento_tipo"]
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movimentacoes_estoque_materia_prima_id_fkey"
+            columns: ["materia_prima_id"]
+            isOneToOne: false
+            referencedRelation: "materias_primas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimentacoes_estoque_ordem_producao_id_fkey"
+            columns: ["ordem_producao_id"]
+            isOneToOne: false
+            referencedRelation: "ordens_producao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ordens_producao: {
+        Row: {
+          created_at: string
+          custo_total: number | null
+          data_producao: string
+          id: string
+          numero_lote: string
+          observacoes: string | null
+          operador_id: string | null
+          operador_nome: string | null
+          produto_id: string
+          quantidade_litros: number
+          sequencia_fabricacao: string | null
+          status: Database["public"]["Enums"]["ordem_status"]
+          tanque: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custo_total?: number | null
+          data_producao?: string
+          id?: string
+          numero_lote: string
+          observacoes?: string | null
+          operador_id?: string | null
+          operador_nome?: string | null
+          produto_id: string
+          quantidade_litros: number
+          sequencia_fabricacao?: string | null
+          status?: Database["public"]["Enums"]["ordem_status"]
+          tanque?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custo_total?: number | null
+          data_producao?: string
+          id?: string
+          numero_lote?: string
+          observacoes?: string | null
+          operador_id?: string | null
+          operador_nome?: string | null
+          produto_id?: string
+          quantidade_litros?: number
+          sequencia_fabricacao?: string | null
+          status?: Database["public"]["Enums"]["ordem_status"]
+          tanque?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ordens_producao_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      produtos: {
+        Row: {
+          categoria: string | null
+          created_at: string
+          custo_calculado: number | null
+          embalagem: string | null
+          id: string
+          margem_percentual: number | null
+          nome: string
+          preco_sugerido: number | null
+          updated_at: string
+          validade_meses: number | null
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string
+          custo_calculado?: number | null
+          embalagem?: string | null
+          id?: string
+          margem_percentual?: number | null
+          nome: string
+          preco_sugerido?: number | null
+          updated_at?: string
+          validade_meses?: number | null
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string
+          custo_calculado?: number | null
+          embalagem?: string | null
+          id?: string
+          margem_percentual?: number | null
+          nome?: string
+          preco_sugerido?: number | null
+          updated_at?: string
+          validade_meses?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          nome: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_any_role: { Args: { _user_id: string }; Returns: boolean }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "administrador" | "producao" | "estoque" | "comercial"
+      movimento_tipo: "entrada" | "saida" | "ajuste"
+      ordem_status: "aberta" | "em_producao" | "finalizada" | "cancelada"
+      qualidade_status: "pendente" | "aprovado" | "reprovado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +475,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["administrador", "producao", "estoque", "comercial"],
+      movimento_tipo: ["entrada", "saida", "ajuste"],
+      ordem_status: ["aberta", "em_producao", "finalizada", "cancelada"],
+      qualidade_status: ["pendente", "aprovado", "reprovado"],
+    },
   },
 } as const
