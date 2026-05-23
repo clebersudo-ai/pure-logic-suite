@@ -588,6 +588,8 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
   const versionInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
   const [obs, setObs] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+  const [preview, setPreview] = useState<{ kind: "pdf" | "image"; url: string; name: string } | null>(null);
 
   useEffect(() => { setDoc(documento); }, [documento]);
 
@@ -609,25 +611,26 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
     return data?.nome ?? user.email ?? "Usuário";
   }
 
-  async function uploadFiles(files: FileList | null, kind: "versao" | "anexo") {
-    if (!files || files.length === 0) return;
+  async function uploadFiles(files: FileList | File[] | null, kind: "versao" | "anexo") {
+    if (!files || (files as any).length === 0) return;
+    const arr = Array.from(files as any) as File[];
     setBusy(true);
     try {
       const nome = await userName();
-      for (const file of Array.from(files)) {
+      let novaVersao = doc.versao_atual ?? 0;
+      for (const file of arr) {
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${doc.id}/${kind}/${Date.now()}_${safe}`;
         const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
         if (up.error) throw up.error;
         if (kind === "versao") {
-          const novaVersao = (doc.versao_atual ?? 0) + 1;
+          novaVersao += 1;
           const ins = await supabase.from("documento_versoes").insert({
             documento_id: doc.id, versao: novaVersao, storage_path: path, nome_arquivo: file.name,
             mime_type: file.type, tamanho_bytes: file.size, observacoes: obs || null,
             enviado_por: user?.id, enviado_por_nome: nome,
           });
           if (ins.error) throw ins.error;
-          await supabase.from("documentos").update({ versao_atual: novaVersao }).eq("id", doc.id);
         } else {
           const ins = await supabase.from("documento_anexos").insert({
             documento_id: doc.id, storage_path: path, nome_arquivo: file.name,
@@ -637,7 +640,12 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
           if (ins.error) throw ins.error;
         }
       }
-      toast.success(kind === "versao" ? "Nova versão registrada" : "Anexo enviado");
+      if (kind === "versao" && novaVersao !== (doc.versao_atual ?? 0)) {
+        await supabase.from("documentos").update({ versao_atual: novaVersao }).eq("id", doc.id);
+      }
+      toast.success(kind === "versao"
+        ? `${arr.length} nova(s) versão(ões) registrada(s)`
+        : `${arr.length} anexo(s) enviado(s)`);
       setObs("");
       await loadAll();
       await onChanged();
@@ -650,89 +658,184 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
     }
   }
 
-  async function openFile(path: string, download = false) {
+  async function signedUrl(path: string, download = false) {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 10, download ? { download: true } : undefined);
-    if (error) { toast.error(error.message); return; }
-    window.open(data.signedUrl, "_blank");
+    if (error) { toast.error(error.message); return null; }
+    return data.signedUrl;
+  }
+
+  async function openFile(path: string, download = false) {
+    const url = await signedUrl(path, download);
+    if (!url) return;
+    if (download) {
+      const a = document.createElement("a"); a.href = url; a.download = ""; a.click();
+      return;
+    }
+    window.open(url, "_blank");
+  }
+
+  async function previewFile(it: { storage_path: string; nome_arquivo: string }) {
+    const ext = it.nome_arquivo.split(".").pop()?.toLowerCase() ?? "";
+    const isPdf = ext === "pdf";
+    const isImg = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+    if (!isPdf && !isImg) { return openFile(it.storage_path); }
+    const url = await signedUrl(it.storage_path);
+    if (!url) return;
+    setPreview({ kind: isPdf ? "pdf" : "image", url, name: it.nome_arquivo });
   }
 
   async function removerAnexo(a: Anexo) {
-    if (!confirm("Remover este anexo?")) return;
+    if (!confirm("Remover este anexo? O arquivo será excluído do repositório.")) return;
     await supabase.storage.from(BUCKET).remove([a.storage_path]);
     await supabase.from("documento_anexos").delete().eq("id", a.id);
     toast.success("Anexo removido");
     await loadAll();
   }
 
+  function onDrop(e: React.DragEvent, kind: "versao" | "anexo") {
+    e.preventDefault(); setDragOver(false);
+    if (!canEdit) return;
+    if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files, kind);
+  }
+
   const versaoAtual = versoes.find(v => v.versao === doc.versao_atual) ?? versoes[0];
   const situacao = situacaoFrom(doc);
   const meta = SITUACAO_META[situacao];
+  const totalBytes = [...versoes, ...anexos].reduce((s, x) => s + (x.tamanho_bytes ?? 0), 0);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            {doc.nome}
-            <Badge variant="outline" className="ml-2">v{doc.versao_atual}</Badge>
-            <Badge variant="outline" className={`gap-1 ${meta.cls}`}>{meta.label}</Badge>
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Metadados regulatórios */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-md border bg-muted/30 p-4 text-sm md:grid-cols-3">
-          <Meta label="Categoria" value={doc.categoria} />
-          <Meta label="Órgão emissor" value={doc.orgao_emissor} />
-          <Meta label="Nº documento" value={doc.numero_documento} />
-          <Meta label="Empresa" value={doc.empresa} />
-          <Meta label="Unidade" value={doc.unidade} />
-          <Meta label="Responsável" value={doc.responsavel} />
-          <Meta label="Emissão" value={fmtDate(doc.data_emissao)} />
-          <Meta label="Validade" value={fmtDate(doc.data_validade)} />
-          <Meta label="Criticidade" value={CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade} />
+      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto p-0">
+        <div className="border-b bg-muted/40 p-5">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <FileText className="h-5 w-5" />
+              </div>
+              <span className="text-lg">{doc.nome}</span>
+              <Badge variant="outline" className="font-mono">v{doc.versao_atual}</Badge>
+              <Badge variant="outline" className={`gap-1 ${meta.cls}`}>{meta.label}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-3">
+            <Meta label="Categoria" value={doc.categoria} />
+            <Meta label="Órgão emissor" value={doc.orgao_emissor} />
+            <Meta label="Nº documento" value={doc.numero_documento} />
+            <Meta label="Empresa" value={doc.empresa} />
+            <Meta label="Unidade" value={doc.unidade} />
+            <Meta label="Responsável" value={doc.responsavel} />
+            <Meta label="Emissão" value={fmtDate(doc.data_emissao)} />
+            <Meta label="Validade" value={fmtDate(doc.data_validade)} />
+            <Meta label="Criticidade" value={CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade} />
+          </div>
         </div>
 
-        {/* Ações */}
-        <div className="flex flex-wrap gap-2 border-y py-3">
-          <Button size="sm" disabled={!versaoAtual} onClick={() => versaoAtual && openFile(versaoAtual.storage_path)}>
-            <Eye className="h-4 w-4" /> Visualizar
-          </Button>
-          <Button size="sm" variant="outline" disabled={!versaoAtual} onClick={() => versaoAtual && openFile(versaoAtual.storage_path, true)}>
-            <Download className="h-4 w-4" /> Baixar
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-card px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={!versaoAtual} onClick={() => versaoAtual && previewFile(versaoAtual)}>
+              <Eye className="h-4 w-4" /> Pré-visualizar
+            </Button>
+            <Button size="sm" variant="outline" disabled={!versaoAtual} onClick={() => versaoAtual && openFile(versaoAtual.storage_path, true)}>
+              <Download className="h-4 w-4" /> Baixar atual
+            </Button>
+            {canEdit && (
+              <>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => versionInputRef.current?.click()}>
+                  <Upload className="h-4 w-4" /> Nova versão
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => anexoInputRef.current?.click()}>
+                  <Paperclip className="h-4 w-4" /> Adicionar anexos
+                </Button>
+              </>
+            )}
+            <input ref={versionInputRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => uploadFiles(e.target.files, "versao")} />
+            <input ref={anexoInputRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => uploadFiles(e.target.files, "anexo")} />
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>{versoes.length} versões</span><span>·</span>
+            <span>{anexos.length} anexos</span><span>·</span>
+            <span>{formatBytes(totalBytes)}</span>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
           {canEdit && (
-            <>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => versionInputRef.current?.click()}>
-                <Upload className="h-4 w-4" /> Substituir versão
-              </Button>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => anexoInputRef.current?.click()}>
-                <Paperclip className="h-4 w-4" /> Novo anexo
-              </Button>
-            </>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => onDrop(e, "anexo")}
+              className={`flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed p-5 text-center transition-colors ${
+                dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/30"
+              }`}
+            >
+              <Upload className="h-5 w-5 text-muted-foreground" />
+              <div className="text-sm font-medium">Arraste arquivos aqui para anexar</div>
+              <div className="text-xs text-muted-foreground">PDF, JPG, PNG, DOCX, XLSX · upload múltiplo</div>
+              <Input
+                value={obs}
+                onChange={(e) => setObs(e.target.value)}
+                placeholder="Observação opcional para os próximos uploads"
+                className="mt-2 max-w-md"
+              />
+            </div>
           )}
-          <input ref={versionInputRef} type="file" accept={ACCEPT} className="hidden" onChange={(e) => uploadFiles(e.target.files, "versao")} />
-          <input ref={anexoInputRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => uploadFiles(e.target.files, "anexo")} />
+
+          <Tabs defaultValue="anexos">
+            <TabsList>
+              <TabsTrigger value="anexos"><Paperclip className="h-3.5 w-3.5" /> Anexos ({anexos.length})</TabsTrigger>
+              <TabsTrigger value="versoes"><History className="h-3.5 w-3.5" /> Histórico de versões ({versoes.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="anexos">
+              <FileList
+                items={anexos}
+                currentVersion={null}
+                onPreview={previewFile}
+                onDownload={(p) => openFile(p, true)}
+                onRemove={canEdit ? removerAnexo : undefined}
+                emptyLabel="Nenhum anexo. Arraste arquivos ou clique em Adicionar anexos."
+              />
+            </TabsContent>
+            <TabsContent value="versoes">
+              <FileList
+                items={versoes.map(v => ({ ...v, versaoLabel: v.versao }))}
+                currentVersion={doc.versao_atual}
+                onPreview={previewFile}
+                onDownload={(p) => openFile(p, true)}
+                emptyLabel="Nenhuma versão registrada. Clique em Nova versão para iniciar."
+                showVersion
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
-        {canEdit && (
-          <FormField label="Observações (aplicadas ao próximo upload)">
-            <Input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Opcional · ex.: renovação 2026" />
-          </FormField>
+        {preview && (
+          <Dialog open onOpenChange={(o) => !o && setPreview(null)}>
+            <DialogContent className="max-w-5xl p-0">
+              <DialogHeader className="border-b p-4">
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <Eye className="h-4 w-4" /> {preview.name}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="bg-muted/30">
+                {preview.kind === "pdf" ? (
+                  <iframe src={preview.url} title={preview.name} className="h-[75vh] w-full bg-white" />
+                ) : (
+                  <div className="flex max-h-[75vh] items-center justify-center overflow-auto p-4">
+                    <img src={preview.url} alt={preview.name} className="max-h-[70vh] max-w-full object-contain" />
+                  </div>
+                )}
+              </div>
+              <DialogFooter className="p-3">
+                <Button variant="outline" onClick={() => window.open(preview.url, "_blank")}>
+                  <Eye className="h-4 w-4" /> Nova aba
+                </Button>
+                <Button onClick={() => { const a = document.createElement("a"); a.href = preview.url; a.download = preview.name; a.click(); }}>
+                  <Download className="h-4 w-4" /> Baixar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
-
-        <Tabs defaultValue="anexos">
-          <TabsList>
-            <TabsTrigger value="anexos"><Paperclip className="h-3.5 w-3.5" /> Anexos ({anexos.length})</TabsTrigger>
-            <TabsTrigger value="versoes"><History className="h-3.5 w-3.5" /> Versões ({versoes.length})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="anexos">
-            <FileList items={anexos} onOpen={openFile} onRemove={canEdit ? removerAnexo : undefined} emptyLabel="Nenhum anexo." />
-          </TabsContent>
-          <TabsContent value="versoes">
-            <FileList items={versoes.map(v => ({ ...v, versaoLabel: v.versao }))} onOpen={openFile} emptyLabel="Nenhuma versão registrada." showVersion />
-          </TabsContent>
-        </Tabs>
       </DialogContent>
     </Dialog>
   );
@@ -742,44 +845,74 @@ function Meta({ label, value }: { label: string; value: string | null | undefine
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="font-medium">{value ?? "—"}</div>
+      <div className="truncate font-medium">{value ?? "—"}</div>
     </div>
   );
 }
 
-function FileList({ items, onOpen, onRemove, emptyLabel, showVersion }: {
+function fileTypeLabel(name: string) {
+  const ext = name.split(".").pop()?.toUpperCase() ?? "ARQ";
+  if (["JPG", "JPEG", "PNG", "GIF", "WEBP"].includes(ext)) return "IMG";
+  return ext;
+}
+
+function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVersion, currentVersion }: {
   items: Array<Anexo & { versaoLabel?: number }>;
-  onOpen: (path: string, download?: boolean) => void;
+  onPreview: (it: { storage_path: string; nome_arquivo: string }) => void;
+  onDownload: (path: string) => void;
   onRemove?: (a: Anexo) => void;
   emptyLabel: string;
   showVersion?: boolean;
+  currentVersion?: number | null;
 }) {
   if (items.length === 0) return <EmptyState label={emptyLabel} />;
   return (
-    <div className="divide-y rounded-md border">
+    <div className="divide-y overflow-hidden rounded-md border bg-card">
       {items.map((it) => {
         const Icon = fileIcon(it.nome_arquivo);
+        const ext = fileTypeLabel(it.nome_arquivo);
+        const isCurrent = showVersion && it.versaoLabel != null && it.versaoLabel === currentVersion;
         return (
-          <div key={it.id} className="flex items-center gap-3 p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
-              <Icon className="h-5 w-5 text-muted-foreground" />
+          <div key={it.id} className="flex flex-wrap items-center gap-3 p-3 transition-colors hover:bg-muted/40">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Icon className="h-5 w-5" />
+              <span className="absolute -bottom-1 -right-1 rounded bg-background px-1 text-[9px] font-bold tracking-wide text-muted-foreground ring-1 ring-border">
+                {ext}
+              </span>
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate font-medium">{it.nome_arquivo}</span>
-                {showVersion && it.versaoLabel != null && <Badge variant="outline">v{it.versaoLabel}</Badge>}
+                {showVersion && it.versaoLabel != null && (
+                  <Badge variant="outline" className="font-mono">v{it.versaoLabel}</Badge>
+                )}
+                {isCurrent && (
+                  <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15">Versão atual</Badge>
+                )}
               </div>
-              <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                 <span>{new Date(it.created_at).toLocaleString("pt-BR")}</span>
-                <span>{it.enviado_por_nome ?? "—"}</span>
-                <span>{formatBytes(it.tamanho_bytes)}</span>
+                <span>· {it.enviado_por_nome ?? "—"}</span>
+                <span>· {formatBytes(it.tamanho_bytes)}</span>
               </div>
-              {it.observacoes && <div className="mt-1 text-xs italic text-muted-foreground">"{it.observacoes}"</div>}
+              {it.observacoes && (
+                <div className="mt-1 rounded bg-muted/60 px-2 py-1 text-xs italic text-muted-foreground">
+                  "{it.observacoes}"
+                </div>
+              )}
             </div>
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" onClick={() => onOpen(it.storage_path)} title="Visualizar"><Eye className="h-4 w-4" /></Button>
-              <Button size="sm" variant="ghost" onClick={() => onOpen(it.storage_path, true)} title="Baixar"><Download className="h-4 w-4" /></Button>
-              {onRemove && <Button size="sm" variant="ghost" onClick={() => onRemove(it)} title="Remover"><Trash2 className="h-4 w-4 text-destructive" /></Button>}
+              <Button size="sm" variant="ghost" onClick={() => onPreview(it)} title="Pré-visualizar">
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onDownload(it.storage_path)} title="Baixar">
+                <Download className="h-4 w-4" />
+              </Button>
+              {onRemove && (
+                <Button size="sm" variant="ghost" onClick={() => onRemove(it)} title="Remover">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              )}
             </div>
           </div>
         );
