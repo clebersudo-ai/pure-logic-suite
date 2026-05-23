@@ -448,6 +448,59 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
     descricao: documento?.descricao ?? "",
   });
   const [saving, setSaving] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiPreview, setAiPreview] = useState<{ kind: "pdf" | "image"; url: string } | null>(null);
+  const [aiFilled, setAiFilled] = useState<string[]>([]);
+  const aiInputRef = useRef<HTMLInputElement>(null);
+  const extract = useServerFn(extractDocumentMetadata);
+
+  function pickAiFile(file: File) {
+    if (aiPreview) URL.revokeObjectURL(aiPreview.url);
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isImg = file.type.startsWith("image/");
+    if (!isPdf && !isImg) { toast.error("Envie um PDF ou imagem para análise IA"); return; }
+    setAiFile(file);
+    setAiPreview({ kind: isPdf ? "pdf" : "image", url: URL.createObjectURL(file) });
+    setAiFilled([]);
+  }
+
+  async function runAi() {
+    if (!aiFile) { toast.error("Selecione um PDF ou imagem"); return; }
+    setAiBusy(true);
+    try {
+      const buf = await aiFile.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+      }
+      const base64 = btoa(bin);
+      const mimeType = aiFile.type || (aiFile.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+      const result = await extract({ data: { base64, mimeType, fileName: aiFile.name } });
+      const filled: string[] = [];
+      setF(prev => {
+        const next = { ...prev };
+        const keys = ["nome", "numero_documento", "orgao_emissor", "categoria", "data_emissao", "data_validade", "empresa", "responsavel", "observacoes"] as const;
+        for (const k of keys) {
+          const v = (result as any)?.[k];
+          if (v && String(v).trim()) {
+            (next as any)[k] = String(v).trim();
+            filled.push(k);
+          }
+        }
+        return next;
+      });
+      setAiFilled(filled);
+      if (filled.length === 0) toast.warning("Nenhum campo identificado. Preencha manualmente.");
+      else toast.success(`IA preencheu ${filled.length} campo(s). Revise antes de salvar.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha na análise IA");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function save() {
     if (!f.nome.trim()) { toast.error("Informe o nome do documento"); return; }
