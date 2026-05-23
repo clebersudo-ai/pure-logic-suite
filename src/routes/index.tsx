@@ -59,6 +59,46 @@ function Dashboard() {
     },
   });
 
+  const { data: reg } = useQuery({
+    queryKey: ["dashboard-regulatorio"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("documentos")
+        .select("id, nome, categoria, orgao_emissor, responsavel, criticidade, data_validade, renovacao_obrigatoria, status")
+        .order("data_validade", { ascending: true, nullsFirst: false });
+      const docs = data ?? [];
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const days = (d: string | null) => {
+        if (!d) return Infinity;
+        const dt = new Date(d); dt.setHours(0, 0, 0, 0);
+        return Math.round((dt.getTime() - today.getTime()) / 86400000);
+      };
+      const enriched = docs.map((d) => {
+        const diff = days(d.data_validade as string | null);
+        let bucket: "vencido" | "critico" | "atencao" | "ativo" | "sem_validade" = "sem_validade";
+        if (d.data_validade) {
+          if (diff < 0) bucket = "vencido";
+          else if (diff <= 30) bucket = "critico";
+          else if (diff <= 90) bucket = "atencao";
+          else bucket = "ativo";
+        }
+        return { ...d, _dias: diff, _bucket: bucket };
+      });
+      const vencidos = enriched.filter((d) => d._bucket === "vencido");
+      const em30 = enriched.filter((d) => d._bucket === "critico");
+      const em90 = enriched.filter((d) => d._bucket === "atencao");
+      const renovacaoPendente = enriched.filter(
+        (d) => d.renovacao_obrigatoria && (d._bucket === "vencido" || d._bucket === "critico"),
+      );
+      const prioridades = enriched
+        .filter((d) => d._bucket === "vencido" || d._bucket === "critico" || d._bucket === "atencao")
+        .sort((a, b) => a._dias - b._dias)
+        .slice(0, 8);
+      return { vencidos, em30, em90, renovacaoPendente, prioridades, total: enriched.length };
+    },
+  });
+
+
   return (
     <div className="space-y-6">
       <div>
