@@ -3,6 +3,13 @@ type RuntimeGlobal = typeof globalThis & {
   __APP_RUNTIME_ENV__?: RuntimeEnv;
 };
 
+const LOVABLE_CLOUD_PUBLIC_ENV: RuntimeEnv = {
+  SUPABASE_URL: "https://dsdnlcnwrpapmwkiaejx.supabase.co",
+  VITE_SUPABASE_URL: "https://dsdnlcnwrpapmwkiaejx.supabase.co",
+  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_YKDtT-mgT7bRJTbHffIQLQ_RLRIdC2C",
+  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_YKDtT-mgT7bRJTbHffIQLQ_RLRIdC2C",
+};
+
 function normalizeRuntimeEnv(env: unknown): RuntimeEnv {
   if (!env || typeof env !== "object") return {};
 
@@ -23,7 +30,7 @@ function readEnv(...keys: string[]) {
   const buildEnv = import.meta.env as RuntimeEnv;
 
   for (const key of keys) {
-    const value = runtimeEnv[key] || processEnv[key] || buildEnv[key];
+    const value = runtimeEnv[key] || processEnv[key] || buildEnv[key] || LOVABLE_CLOUD_PUBLIC_ENV[key];
     if (value) return value;
   }
 
