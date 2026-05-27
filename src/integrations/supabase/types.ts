@@ -161,6 +161,7 @@ export type Database = {
       documentos: {
         Row: {
           categoria: string | null
+          cnpj: string | null
           created_at: string
           criado_por: string | null
           criticidade: string
@@ -176,12 +177,17 @@ export type Database = {
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
+          tipo_documento: string | null
+          uf: string | null
           unidade: string | null
           updated_at: string
+          validado_em: string | null
+          validado_ia: boolean
           versao_atual: number
         }
         Insert: {
           categoria?: string | null
+          cnpj?: string | null
           created_at?: string
           criado_por?: string | null
           criticidade?: string
@@ -197,12 +203,17 @@ export type Database = {
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
+          tipo_documento?: string | null
+          uf?: string | null
           unidade?: string | null
           updated_at?: string
+          validado_em?: string | null
+          validado_ia?: boolean
           versao_atual?: number
         }
         Update: {
           categoria?: string | null
+          cnpj?: string | null
           created_at?: string
           criado_por?: string | null
           criticidade?: string
@@ -218,8 +229,12 @@ export type Database = {
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
+          tipo_documento?: string | null
+          uf?: string | null
           unidade?: string | null
           updated_at?: string
+          validado_em?: string | null
+          validado_ia?: boolean
           versao_atual?: number
         }
         Relationships: []

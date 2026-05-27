@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export type ExtractedDoc = {
+  tipo_documento?: string;
   nome?: string;
   numero_documento?: string;
   orgao_emissor?: string;
@@ -8,18 +9,34 @@ export type ExtractedDoc = {
   data_emissao?: string;
   data_validade?: string;
   empresa?: string;
+  cnpj?: string;
+  uf?: string;
   responsavel?: string;
   observacoes?: string;
 };
 
-const SYSTEM = `Você é um especialista em análise de documentos regulatórios industriais brasileiros (ANVISA, CRQ, CETESB, Corpo de Bombeiros, Polícia Civil, Polícia Federal, Exército, Vigilância Sanitária, Prefeitura, Contrato Social, Inscrição Estadual, etc).
-Analise o documento (imagem ou PDF) e extraia os metadados regulatórios com máxima precisão.
+const TIPOS = [
+  "Contrato Social", "Alteração Contratual", "Cartão CNPJ",
+  "Inscrição Estadual", "Inscrição Municipal", "AFE ANVISA",
+  "Licença Sanitária", "CRQ", "CETESB", "FISPQ",
+  "Boletim Técnico", "Nota Fiscal", "Certificado", "Procuração",
+  "Documento de Funcionário", "AVCB", "Alvará", "Licença Ambiental", "Outros",
+];
+
+const SYSTEM = `Você é um especialista em análise de documentos regulatórios e corporativos brasileiros.
+Analise o documento (imagem ou PDF) e extraia os metadados com máxima precisão.
+
+REGRAS:
+- "tipo_documento" DEVE ser uma das opções: ${TIPOS.join(", ")}.
+- "nome" deve ser o título oficial do documento (ex.: "Licença de Operação 2026", "AFE ANVISA").
+- "orgao_emissor": ANVISA, CRQ, CETESB, Corpo de Bombeiros, Polícia Civil, Polícia Federal, Exército, Vigilância Sanitária, Prefeitura, Receita Federal, Junta Comercial, Secretaria da Fazenda, ou o nome exato.
+- "categoria" sugerida: Licença Ambiental, Sanitária, Fiscal, Trabalhista, Qualidade, RH, ANVISA, Bombeiros, Outros.
+- "cnpj" no formato 00.000.000/0000-00 quando presente.
+- "uf" sigla com 2 letras maiúsculas (SP, RJ, MG…).
+- "empresa" é a razão social vinculada ao documento.
 - Datas SEMPRE no formato ISO YYYY-MM-DD.
-- "nome" deve ser o título oficial do documento (ex: "Licença de Operação", "Autorização de Funcionamento", "AVCB").
-- "orgao_emissor" deve ser uma das opções: ANVISA, CRQ, CETESB, Corpo de Bombeiros, Polícia Civil, Polícia Federal, Exército, Vigilância Sanitária, Prefeitura, Receita Federal, Junta Comercial — ou o nome exato do órgão.
-- "categoria" sugerida: Licença Ambiental, Licença Sanitária, Autorização Especial, Certificado de Regularidade, Alvará, Contrato Social, Inscrição, AVCB, Outros.
-- Se um campo não estiver presente no documento, OMITA o campo (não invente).
-- "observacoes" deve trazer informações relevantes (restrições, classe, escopo, condicionantes).`;
+- Se um campo não estiver no documento, OMITA (não invente).
+- "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.`;
 
 export const extractDocumentMetadata = createServerFn({ method: "POST" })
   .inputValidator((d: { base64: string; mimeType: string; fileName?: string }) => {
@@ -41,7 +58,7 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
           content: [
             {
               type: "text",
-              text: `Extraia os metadados regulatórios deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Use a função extract_regulatory_document.`,
+              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Use a função extract_regulatory_document.`,
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
@@ -52,19 +69,22 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
           type: "function",
           function: {
             name: "extract_regulatory_document",
-            description: "Retorna os metadados extraídos do documento regulatório.",
+            description: "Retorna os metadados extraídos do documento.",
             parameters: {
               type: "object",
               properties: {
+                tipo_documento: { type: "string", description: "Tipo identificado do documento" },
                 nome: { type: "string", description: "Título oficial do documento" },
                 numero_documento: { type: "string", description: "Número/protocolo do documento" },
                 orgao_emissor: { type: "string", description: "Órgão emissor" },
-                categoria: { type: "string", description: "Categoria do documento" },
+                categoria: { type: "string", description: "Categoria" },
                 data_emissao: { type: "string", description: "Data de emissão YYYY-MM-DD" },
                 data_validade: { type: "string", description: "Data de validade YYYY-MM-DD" },
-                empresa: { type: "string", description: "Razão social / empresa vinculada" },
-                responsavel: { type: "string", description: "Responsável técnico / legal" },
-                observacoes: { type: "string", description: "Observações relevantes, escopo, restrições" },
+                empresa: { type: "string", description: "Razão social" },
+                cnpj: { type: "string", description: "CNPJ formatado" },
+                uf: { type: "string", description: "Sigla do estado" },
+                responsavel: { type: "string", description: "Responsável técnico/legal" },
+                observacoes: { type: "string", description: "Observações, escopo, restrições" },
               },
               additionalProperties: false,
             },
@@ -92,12 +112,9 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
 
     const json = await res.json();
     const call = json?.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call?.function?.arguments) {
-      return {} as ExtractedDoc;
-    }
+    if (!call?.function?.arguments) return {} as ExtractedDoc;
     try {
-      const parsed = JSON.parse(call.function.arguments) as ExtractedDoc;
-      return parsed;
+      return JSON.parse(call.function.arguments) as ExtractedDoc;
     } catch {
       return {} as ExtractedDoc;
     }
