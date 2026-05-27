@@ -1053,3 +1053,460 @@ function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVers
     </div>
   );
 }
+
+// ============================================================================
+// Smart Intake — Upload inteligente com IA, dedup e confirmação
+// ============================================================================
+
+function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  userId: string | null;
+  existing: Documento[];
+  onSaved: () => Promise<void>;
+}) {
+  const extract = useServerFn(extractDocumentMetadata);
+  const [step, setStep] = useState<"upload" | "analyzing" | "review">("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<{ kind: "pdf" | "image" | "other"; url: string } | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [aiFilled, setAiFilled] = useState<string[]>([]);
+  const [duplicate, setDuplicate] = useState<Documento | null>(null);
+  const [replaceMode, setReplaceMode] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [f, setF] = useState({
+    tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
+    categoria: "", data_emissao: "", data_validade: "", empresa: "",
+    cnpj: "", uf: "", responsavel: "", observacoes: "",
+    criticidade: "media", renovacao_obrigatoria: false,
+  });
+
+  function pickFile(file: File) {
+    if (preview) URL.revokeObjectURL(preview.url);
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    const isImg = file.type.startsWith("image/");
+    const isDocx = file.name.toLowerCase().endsWith(".docx");
+    if (!isPdf && !isImg && !isDocx) {
+      toast.error("Envie PDF, JPG, PNG ou DOCX");
+      return;
+    }
+    setFile(file);
+    setPreview({
+      kind: isPdf ? "pdf" : isImg ? "image" : "other",
+      url: URL.createObjectURL(file),
+    });
+    if (isPdf || isImg) runAi(file);
+    else {
+      // DOCX: pula IA, vai direto pra revisão manual
+      setStep("review");
+      setF(s => ({ ...s, nome: file.name.replace(/\.[^.]+$/, "") }));
+      toast.info("DOCX detectado. Preencha os dados manualmente.");
+    }
+  }
+
+  async function runAi(file: File) {
+    setStep("analyzing");
+    setProgress(15);
+    try {
+      const buf = await file.arrayBuffer();
+      setProgress(35);
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+      }
+      const base64 = btoa(bin);
+      setProgress(55);
+      const mimeType = file.type || (file.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg");
+      const result = await extract({ data: { base64, mimeType, fileName: file.name } });
+      setProgress(90);
+
+      const filled: string[] = [];
+      const next = { ...f };
+      const keys = ["tipo_documento", "nome", "numero_documento", "orgao_emissor", "categoria",
+        "data_emissao", "data_validade", "empresa", "cnpj", "uf", "responsavel", "observacoes"] as const;
+      for (const k of keys) {
+        const v = (result as any)?.[k];
+        if (v && String(v).trim()) {
+          (next as any)[k] = String(v).trim();
+          filled.push(k);
+        }
+      }
+      if (!next.nome && next.tipo_documento) next.nome = next.tipo_documento;
+      setF(next);
+      setAiFilled(filled);
+
+      // Dedup check
+      const dup = findDuplicate(existing, next);
+      setDuplicate(dup);
+      setReplaceMode(false);
+
+      setProgress(100);
+      setStep("review");
+      if (filled.length === 0) toast.warning("Nenhum dado identificado. Preencha manualmente.");
+      else toast.success(`IA identificou ${filled.length} campo(s).`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha na análise IA");
+      setStep("review");
+    } finally {
+      setProgress(0);
+    }
+  }
+
+  async function confirm() {
+    if (!file) { toast.error("Nenhum arquivo selecionado"); return; }
+    if (!f.nome.trim()) { toast.error("Informe o nome do documento"); return; }
+    setSaving(true);
+    try {
+      // Buscar nome do usuário
+      let nomeUser = "Sistema";
+      if (userId) {
+        const { data } = await supabase.from("profiles").select("nome").eq("id", userId).single();
+        nomeUser = data?.nome ?? "Usuário";
+      }
+
+      let docId: string;
+      let novaVersao: number;
+
+      if (replaceMode && duplicate) {
+        docId = duplicate.id;
+        novaVersao = (duplicate.versao_atual ?? 0) + 1;
+        const payload: any = {
+          nome: f.nome,
+          tipo_documento: f.tipo_documento || null,
+          categoria: f.categoria || null,
+          orgao_emissor: f.orgao_emissor || null,
+          numero_documento: f.numero_documento || null,
+          empresa: f.empresa || null,
+          cnpj: f.cnpj || null,
+          uf: f.uf || null,
+          responsavel: f.responsavel || null,
+          data_emissao: f.data_emissao || null,
+          data_validade: f.data_validade || null,
+          renovacao_obrigatoria: f.renovacao_obrigatoria,
+          criticidade: f.criticidade,
+          observacoes: f.observacoes || null,
+          validado_ia: true,
+          validado_em: new Date().toISOString(),
+          versao_atual: novaVersao,
+          status: "ativo",
+        };
+        const { error } = await supabase.from("documentos").update(payload).eq("id", docId);
+        if (error) throw error;
+      } else {
+        novaVersao = 1;
+        const payload: any = {
+          nome: f.nome,
+          tipo_documento: f.tipo_documento || null,
+          categoria: f.categoria || null,
+          orgao_emissor: f.orgao_emissor || null,
+          numero_documento: f.numero_documento || null,
+          empresa: f.empresa || null,
+          cnpj: f.cnpj || null,
+          uf: f.uf || null,
+          responsavel: f.responsavel || null,
+          data_emissao: f.data_emissao || null,
+          data_validade: f.data_validade || null,
+          renovacao_obrigatoria: f.renovacao_obrigatoria,
+          criticidade: f.criticidade,
+          observacoes: f.observacoes || null,
+          status: "ativo",
+          validado_ia: true,
+          validado_em: new Date().toISOString(),
+          versao_atual: novaVersao,
+          criado_por: userId,
+        };
+        const { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
+        if (error) throw error;
+        docId = (data as any).id;
+      }
+
+      // Upload do arquivo (versionado)
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${docId}/versao/${Date.now()}_${safe}`;
+      const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+      if (up.error) throw up.error;
+
+      const insV = await supabase.from("documento_versoes").insert({
+        documento_id: docId,
+        versao: novaVersao,
+        storage_path: path,
+        nome_arquivo: file.name,
+        mime_type: file.type,
+        tamanho_bytes: file.size,
+        observacoes: `Validado por IA · ${nomeUser}`,
+        enviado_por: userId,
+        enviado_por_nome: nomeUser,
+      });
+      if (insV.error) throw insV.error;
+
+      toast.success(replaceMode
+        ? `Documento atualizado para v${novaVersao} · Validado`
+        : "Documento validado e anexado automaticamente");
+      await onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao salvar documento");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const cls = (k: string) => aiFilled.includes(k) ? "ring-1 ring-primary/50 bg-primary/5" : "";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o && preview) URL.revokeObjectURL(preview.url); onOpenChange(o); }}>
+      <DialogContent className="max-w-5xl max-h-[94vh] overflow-y-auto p-0">
+        <DialogHeader className="border-b bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5">
+          <DialogTitle className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <ScanLine className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-lg">Upload Inteligente</div>
+              <div className="text-xs font-normal text-muted-foreground">
+                IA analisa o documento, extrai os dados e organiza automaticamente
+              </div>
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Stepper */}
+        <div className="flex items-center justify-center gap-2 border-b bg-muted/30 px-5 py-3 text-xs">
+          <StepDot active={step === "upload"} done={step !== "upload"} label="1. Upload" icon={Upload} />
+          <div className="h-px w-8 bg-border" />
+          <StepDot active={step === "analyzing"} done={step === "review"} label="2. IA analisa" icon={FileSearch} />
+          <div className="h-px w-8 bg-border" />
+          <StepDot active={step === "review"} done={false} label="3. Confirmar" icon={CheckCircle2} />
+        </div>
+
+        {step === "upload" && (
+          <div className="p-6">
+            <div
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const fl = e.dataTransfer.files?.[0]; if (fl) pickFile(fl); }}
+              className="flex min-h-[280px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center transition-colors hover:bg-primary/10"
+            >
+              <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.docx" className="hidden"
+                onChange={(e) => { const fl = e.target.files?.[0]; if (fl) pickFile(fl); e.currentTarget.value = ""; }} />
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                <Upload className="h-8 w-8" />
+              </div>
+              <div>
+                <div className="text-base font-semibold">Arraste o documento aqui</div>
+                <div className="text-sm text-muted-foreground">ou clique para selecionar</div>
+              </div>
+              <div className="flex flex-wrap justify-center gap-1 text-[10px]">
+                {["PDF", "JPG", "PNG", "DOCX"].map(t => (
+                  <span key={t} className="rounded bg-background px-2 py-0.5 font-mono font-semibold text-muted-foreground ring-1 ring-border">{t}</span>
+                ))}
+              </div>
+              <div className="mt-2 max-w-md text-xs text-muted-foreground">
+                <Sparkles className="mr-1 inline h-3 w-3 text-primary" />
+                A IA identifica automaticamente: Contrato Social, Cartão CNPJ, AFE ANVISA, CRQ, CETESB, Licença Sanitária, FISPQ, Inscrições Estadual/Municipal, Certificados e mais.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === "analyzing" && (
+          <div className="flex flex-col items-center justify-center gap-4 p-10">
+            <div className="relative">
+              <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <FileSearch className="h-10 w-10 animate-pulse" />
+              </div>
+              <Loader2 className="absolute -bottom-1 -right-1 h-6 w-6 animate-spin text-primary" />
+            </div>
+            <div className="text-center">
+              <div className="text-base font-semibold">Analisando documento com IA…</div>
+              <div className="text-xs text-muted-foreground">Identificando tipo, datas, órgão emissor, CNPJ…</div>
+            </div>
+            <div className="w-full max-w-sm">
+              <Progress value={progress} />
+            </div>
+          </div>
+        )}
+
+        {step === "review" && (
+          <div className="grid gap-4 p-5 lg:grid-cols-[1fr_1.2fr]">
+            {/* Preview */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pré-visualização</div>
+              <div className="overflow-hidden rounded-lg border bg-muted/30">
+                {preview?.kind === "pdf" ? (
+                  <iframe src={preview.url} className="h-[520px] w-full bg-white" title="Preview" />
+                ) : preview?.kind === "image" ? (
+                  <div className="flex h-[520px] items-center justify-center p-2">
+                    <img src={preview.url} alt="Preview" className="max-h-full max-w-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="flex h-[520px] flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
+                    <FileType className="h-12 w-12" />
+                    <div className="text-sm font-medium">{file?.name}</div>
+                    <div className="text-xs">Pré-visualização indisponível para DOCX</div>
+                  </div>
+                )}
+              </div>
+              {file && (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="truncate">{file.name}</span>
+                  <span>{formatBytes(file.size)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Form */}
+            <div className="space-y-3">
+              {aiFilled.length > 0 && (
+                <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span>IA identificou <b>{aiFilled.length} campo(s)</b>. Revise e edite se necessário.</span>
+                </div>
+              )}
+
+              {duplicate && !replaceMode && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+                  <div className="mb-1 flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5" /> Documento similar já existe
+                  </div>
+                  <div className="text-muted-foreground">
+                    <b>{duplicate.nome}</b> · {duplicate.numero_documento ?? "s/nº"} · v{duplicate.versao_atual}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setReplaceMode(true)}>
+                      <History className="h-3 w-3" /> Substituir versão
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDuplicate(null)}>
+                      Criar novo mesmo assim
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {replaceMode && duplicate && (
+                <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2 text-xs">
+                  <CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-blue-600" />
+                  Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de "{duplicate.nome}". A versão anterior é preservada no histórico.
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <FormField label="Tipo de documento">
+                  <Input className={cls("tipo_documento")} value={f.tipo_documento} onChange={(e) => setF(s => ({ ...s, tipo_documento: e.target.value }))} placeholder="Ex.: AFE ANVISA" />
+                </FormField>
+                <FormField label="Categoria">
+                  <div className={cls("categoria") + " rounded-md"}>
+                    <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+                  </div>
+                </FormField>
+                <div className="col-span-2">
+                  <FormField label="Nome do documento *">
+                    <Input className={cls("nome")} value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} />
+                  </FormField>
+                </div>
+                <FormField label="Número">
+                  <Input className={cls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
+                </FormField>
+                <FormField label="Órgão emissor">
+                  <div className={cls("orgao_emissor") + " rounded-md"}>
+                    <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+                  </div>
+                </FormField>
+                <FormField label="Empresa / Razão social">
+                  <Input className={cls("empresa")} value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
+                </FormField>
+                <FormField label="CNPJ">
+                  <Input className={cls("cnpj")} value={f.cnpj} onChange={(e) => setF(s => ({ ...s, cnpj: e.target.value }))} placeholder="00.000.000/0000-00" />
+                </FormField>
+                <FormField label="UF">
+                  <Input className={cls("uf")} value={f.uf} onChange={(e) => setF(s => ({ ...s, uf: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="SP" />
+                </FormField>
+                <FormField label="Responsável">
+                  <Input className={cls("responsavel")} value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} />
+                </FormField>
+                <FormField label="Emissão">
+                  <Input type="date" className={cls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
+                </FormField>
+                <FormField label="Validade">
+                  <Input type="date" className={cls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
+                </FormField>
+                <FormField label="Criticidade">
+                  <Select value={f.criticidade} onValueChange={(v) => setF(s => ({ ...s, criticidade: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CRITICIDADES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <div className="col-span-2 flex items-center justify-between rounded-md border p-2">
+                  <Label className="text-xs">Renovação obrigatória</Label>
+                  <Switch checked={f.renovacao_obrigatoria} onCheckedChange={(v) => setF(s => ({ ...s, renovacao_obrigatoria: v }))} />
+                </div>
+                <div className="col-span-2">
+                  <FormField label="Observações">
+                    <Textarea rows={2} className={cls("observacoes")} value={f.observacoes} onChange={(e) => setF(s => ({ ...s, observacoes: e.target.value }))} />
+                  </FormField>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="border-t bg-muted/20 p-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+          {step === "review" && (
+            <>
+              <Button variant="ghost" onClick={() => { setStep("upload"); setFile(null); setAiFilled([]); setDuplicate(null); }} disabled={saving}>
+                <Upload className="h-4 w-4" /> Trocar arquivo
+              </Button>
+              <Button onClick={confirm} disabled={saving} className="bg-gradient-to-r from-emerald-600 to-emerald-500">
+                {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</> : <><CheckCircle2 className="h-4 w-4" /> Confirmar e anexar</>}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StepDot({ active, done, label, icon: Icon }: {
+  active: boolean; done: boolean; label: string; icon: typeof Upload;
+}) {
+  return (
+    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors ${
+      active ? "bg-primary text-primary-foreground" : done ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+    }`}>
+      <Icon className="h-3 w-3" /> {label}
+    </div>
+  );
+}
+
+function findDuplicate(docs: Documento[], f: { numero_documento?: string; nome?: string; cnpj?: string; empresa?: string; tipo_documento?: string }): Documento | null {
+  const num = (f.numero_documento ?? "").trim().toLowerCase();
+  const nome = (f.nome ?? "").trim().toLowerCase();
+  const cnpj = (f.cnpj ?? "").replace(/\D/g, "");
+  const empresa = (f.empresa ?? "").trim().toLowerCase();
+  const tipo = (f.tipo_documento ?? "").trim().toLowerCase();
+
+  for (const d of docs) {
+    const dNum = (d.numero_documento ?? "").trim().toLowerCase();
+    const dCnpj = (d.cnpj ?? "").replace(/\D/g, "");
+    const dNome = (d.nome ?? "").trim().toLowerCase();
+    const dEmpresa = (d.empresa ?? "").trim().toLowerCase();
+    const dTipo = (d.tipo_documento ?? "").trim().toLowerCase();
+
+    // Match forte: número + cnpj
+    if (num && dNum && num === dNum && cnpj && dCnpj && cnpj === dCnpj) return d;
+    // Match forte: número + empresa
+    if (num && dNum && num === dNum && empresa && dEmpresa && empresa === dEmpresa) return d;
+    // Match: tipo + cnpj (mesmo tipo de documento da mesma empresa)
+    if (tipo && dTipo && tipo === dTipo && cnpj && dCnpj && cnpj === dCnpj) return d;
+    // Fallback: mesmo nome exato
+    if (nome && dNome && nome === dNome) return d;
+  }
+  return null;
+}
