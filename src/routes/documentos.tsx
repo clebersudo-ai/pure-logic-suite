@@ -204,9 +204,14 @@ function DocumentosPage() {
         title="Controle Regulatório"
         subtitle="Gestão documental · licenças, certificações e validades"
         action={canEdit && (
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
-            <Plus className="h-4 w-4" /> Novo documento
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setSmartOpen(true)} className="bg-gradient-to-r from-primary to-primary/70">
+              <ScanLine className="h-4 w-4" /> Upload inteligente
+            </Button>
+            <Button variant="outline" onClick={() => { setEditing(null); setFormOpen(true); }}>
+              <Plus className="h-4 w-4" /> Novo manual
+            </Button>
+          </div>
         )}
       />
 
