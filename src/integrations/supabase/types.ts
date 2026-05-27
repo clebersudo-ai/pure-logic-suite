@@ -108,6 +108,30 @@ export type Database = {
           },
         ]
       }
+      documento_opcoes: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          tipo: string
+          valor: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          tipo: string
+          valor: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          tipo?: string
+          valor?: string
+        }
+        Relationships: []
+      }
       documento_versoes: {
         Row: {
           created_at: string

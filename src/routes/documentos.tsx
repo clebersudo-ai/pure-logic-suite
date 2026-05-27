@@ -22,7 +22,7 @@ import {
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
   Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
-  ScanLine, CheckCircle2, FileSearch,
+  ScanLine, CheckCircle2, FileSearch, Settings,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
@@ -38,8 +38,31 @@ export const Route = createFileRoute("/documentos")({
 const BUCKET = "documentos";
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.docx,.xlsx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-const CATEGORIAS = ["Licença Ambiental", "Sanitária", "Bombeiros", "Fiscal", "Trabalhista", "Qualidade", "RH", "ANVISA", "IBAMA", "Outros"];
-const ORGAOS = ["ANVISA", "IBAMA", "CETESB", "Vigilância Sanitária", "Corpo de Bombeiros", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Outros"];
+type DocumentoOpcao = {
+  id: string;
+  tipo: string;
+  valor: string;
+  label: string | null;
+};
+
+type OptionItem = { value: string; label: string };
+
+type DocumentoOpcaoTipo = "categoria" | "orgao" | "responsavel" | "status" | "vencimento";
+
+const DEFAULT_CATEGORIAS = ["Licença Ambiental", "Sanitária", "Bombeiros", "Fiscal", "Trabalhista", "Qualidade", "RH", "ANVISA", "IBAMA", "Outros"];
+const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "Vigilância Sanitária", "Corpo de Bombeiros", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Outros"];
+const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
+  { value: "ativo", label: "Ativo" },
+  { value: "em_renovacao", label: "Em renovação" },
+  { value: "arquivado", label: "Arquivado" },
+];
+const DEFAULT_VENCIMENTO_OPTIONS: OptionItem[] = [
+  { value: "vencido", label: "Já vencidos" },
+  { value: "30", label: "Em 30 dias" },
+  { value: "60", label: "Em 60 dias" },
+  { value: "90", label: "Em 90 dias" },
+];
+
 const CRITICIDADES = [
   { value: "baixa", label: "Baixa" },
   { value: "media", label: "Média" },
@@ -64,9 +87,10 @@ type Versao = {
 };
 type Anexo = Omit<Versao, "versao">;
 
-type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade";
+type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado";
 
 function situacaoFrom(d: Documento): Situacao {
+  if (d.status === "arquivado") return "arquivado";
   if (d.status === "em_renovacao") return "atencao";
   if (!d.data_validade) return "sem_validade";
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -84,6 +108,7 @@ const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof
   critico:      { label: "Crítico",      cls: "bg-orange-500/15 text-orange-600 border-orange-500/30",    icon: AlertTriangle },
   vencido:      { label: "Vencido",      cls: "bg-red-500/15 text-red-600 border-red-500/30",             icon: AlertOctagon },
   sem_validade: { label: "Sem validade", cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
+  arquivado:    { label: "Arquivado",    cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
 };
 
 function diasAteVencer(d: Documento): number | null {
@@ -114,33 +139,63 @@ function fmtDate(s: string | null) {
 
 const CHART_COLORS = ["hsl(var(--primary))", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
 
+function toOptionItem(o: DocumentoOpcao): OptionItem {
+  return { value: o.valor, label: o.label || o.valor };
+}
+
+function optionTextItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fallback: string[]) {
+  const saved = options.filter(o => o.tipo === tipo).map(o => o.label || o.valor);
+  return saved.length > 0 ? saved : fallback;
+}
+
+function optionValueItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fallback: OptionItem[]) {
+  const saved = options.filter(o => o.tipo === tipo).map(toOptionItem);
+  return saved.length > 0 ? saved : fallback;
+}
+
 function DocumentosPage() {
   const { user, hasRole } = useAuth();
   const canEdit = hasRole("administrador") || hasRole("comercial");
   const [docs, setDocs] = useState<Documento[]>([]);
+  const [options, setOptions] = useState<DocumentoOpcao[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [fCategoria, setFCategoria] = useState("__all");
   const [fOrgao, setFOrgao] = useState("__all");
   const [fResponsavel, setFResponsavel] = useState("__all");
-  const [fSituacao, setFSituacao] = useState<"__all" | Situacao>("__all");
-  const [fVencimento, setFVencimento] = useState<"__all" | "30" | "60" | "90" | "vencido">("__all");
+  const [fSituacao, setFSituacao] = useState("__all");
+  const [fVencimento, setFVencimento] = useState<"__all" | string>("__all");
   const [selected, setSelected] = useState<Documento | null>(null);
   const [editing, setEditing] = useState<Documento | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+
+  const categorias = useMemo(() => optionTextItems(options, "categoria", DEFAULT_CATEGORIAS), [options]);
+  const orgaos = useMemo(() => optionTextItems(options, "orgao", DEFAULT_ORGAOS), [options]);
+  const responsaveisOpcoes = useMemo(() => optionTextItems(options, "responsavel", []), [options]);
+  const statusOpcoes = useMemo(() => optionValueItems(options, "status", DEFAULT_STATUS_OPTIONS), [options]);
+  const vencimentoOpcoes = useMemo(() => optionValueItems(options, "vencimento", DEFAULT_VENCIMENTO_OPTIONS), [options]);
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false });
-    setDocs((data as any as Documento[]) ?? []);
+    const [docsRes, optsRes] = await Promise.all([
+      supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
+      supabase.from("documento_opcoes").select("*").order("valor", { ascending: true })
+    ]);
+
+    setDocs((docsRes.data as any as Documento[]) ?? []);
+    setOptions((optsRes.data as DocumentoOpcao[]) ?? []);
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
 
   const responsaveis = useMemo(
-    () => Array.from(new Set(docs.map(d => d.responsavel).filter(Boolean) as string[])).sort(),
-    [docs]
+    () => Array.from(new Set([
+      ...responsaveisOpcoes,
+      ...docs.map(d => d.responsavel).filter(Boolean) as string[]
+    ])).sort(),
+    [docs, responsaveisOpcoes]
   );
 
   const enriched = useMemo(
@@ -159,11 +214,14 @@ function DocumentosPage() {
       if (fCategoria !== "__all" && doc.categoria !== fCategoria) return false;
       if (fOrgao !== "__all" && doc.orgao_emissor !== fOrgao) return false;
       if (fResponsavel !== "__all" && doc.responsavel !== fResponsavel) return false;
-      if (fSituacao !== "__all" && situacao !== fSituacao) return false;
+      if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao) return false;
       if (fVencimento !== "__all") {
         if (dias == null) return false;
         if (fVencimento === "vencido") { if (dias >= 0) return false; }
-        else if (dias < 0 || dias > Number(fVencimento)) return false;
+        else {
+          const limite = Number(fVencimento);
+          if (!Number.isFinite(limite) || dias < 0 || dias > limite) return false;
+        }
       }
       return true;
     });
@@ -206,6 +264,9 @@ function DocumentosPage() {
         subtitle="Gestão documental · licenças, certificações e validades"
         action={canEdit && (
           <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={() => setConfigOpen(true)} title="Configurações de opções">
+              <Settings className="h-4 w-4" />
+            </Button>
             <Button onClick={() => setSmartOpen(true)} className="bg-gradient-to-r from-primary to-primary/70">
               <ScanLine className="h-4 w-4" /> Upload inteligente
             </Button>
@@ -278,20 +339,11 @@ function DocumentosPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <FilterPill icon={Filter} label="Categoria" value={fCategoria} setValue={setFCategoria} options={CATEGORIAS} />
-            <FilterPill icon={Building2} label="Órgão" value={fOrgao} setValue={setFOrgao} options={ORGAOS} />
+            <FilterPill icon={Filter} label="Categoria" value={fCategoria} setValue={setFCategoria} options={categorias} />
+            <FilterPill icon={Building2} label="Órgão" value={fOrgao} setValue={setFOrgao} options={orgaos} />
             <FilterPill label="Responsável" value={fResponsavel} setValue={setFResponsavel} options={responsaveis} />
-            <FilterPill label="Status" value={fSituacao} setValue={(v) => setFSituacao(v as any)} options={[
-              { value: "ativo", label: "Ativo" }, { value: "atencao", label: "Atenção" },
-              { value: "critico", label: "Crítico" }, { value: "vencido", label: "Vencido" },
-              { value: "sem_validade", label: "Sem validade" },
-            ]} />
-            <FilterPill icon={CalendarClock} label="Vencimento" value={fVencimento} setValue={(v) => setFVencimento(v as any)} options={[
-              { value: "vencido", label: "Já vencidos" },
-              { value: "30", label: "Em 30 dias" },
-              { value: "60", label: "Em 60 dias" },
-              { value: "90", label: "Em 90 dias" },
-            ]} />
+            <FilterPill label="Status" value={fSituacao} setValue={(v) => setFSituacao(v as any)} options={statusOpcoes} />
+            <FilterPill icon={CalendarClock} label="Vencimento" value={fVencimento} setValue={(v) => setFVencimento(v as any)} options={vencimentoOpcoes} />
           </div>
         </div>
 
@@ -377,6 +429,10 @@ function DocumentosPage() {
           onOpenChange={setFormOpen}
           documento={editing}
           userId={user?.id ?? null}
+          categorias={categorias}
+          orgaos={orgaos}
+          responsaveis={responsaveis}
+          statusOptions={statusOpcoes}
           onSaved={async () => { setFormOpen(false); setEditing(null); await load(); }}
         />
       )}
@@ -387,7 +443,19 @@ function DocumentosPage() {
           onOpenChange={setSmartOpen}
           userId={user?.id ?? null}
           existing={docs}
+          categorias={categorias}
+          orgaos={orgaos}
+          responsaveis={responsaveis}
           onSaved={async () => { setSmartOpen(false); await load(); }}
+        />
+      )}
+
+      {configOpen && (
+        <DocumentoOpcoesDialog
+          open={configOpen}
+          onOpenChange={setConfigOpen}
+          options={options}
+          onChanged={load}
         />
       )}
 
@@ -446,9 +514,10 @@ function FilterPill({ icon: Icon, label, value, setValue, options }: {
   );
 }
 
-function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
+function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categorias, orgaos, responsaveis, statusOptions }: {
   open: boolean; onOpenChange: (o: boolean) => void;
   documento: Documento | null; userId: string | null; onSaved: () => Promise<void>;
+  categorias: string[]; orgaos: string[]; responsaveis: string[]; statusOptions: OptionItem[];
 }) {
   const isEdit = !!documento;
   const [f, setF] = useState({
@@ -624,19 +693,21 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
           </div>
           <FormField label="Categoria">
             <div className={aiCls("categoria") + " rounded-md"}>
-              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
             </div>
           </FormField>
           <FormField label="Órgão emissor">
             <div className={aiCls("orgao_emissor") + " rounded-md"}>
-              <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+              <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={orgaos} placeholder="Selecione…" />
             </div>
           </FormField>
           <FormField label="Número do documento">
             <Input className={aiCls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
           </FormField>
           <FormField label="Responsável">
-            <Input className={aiCls("responsavel")} value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} placeholder="Nome do responsável" />
+            <div className={aiCls("responsavel") + " rounded-md"}>
+              <SimpleCombo value={f.responsavel} setValue={(v) => setF(s => ({ ...s, responsavel: v }))} options={responsaveis} placeholder="Selecione…" />
+            </div>
           </FormField>
           <FormField label="Empresa vinculada">
             <Input className={aiCls("empresa")} value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
@@ -662,9 +733,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved }: {
             <Select value={f.status} onValueChange={(v) => setF(s => ({ ...s, status: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="ativo">Ativo</SelectItem>
-                <SelectItem value="em_renovacao">Em renovação</SelectItem>
-                <SelectItem value="arquivado">Arquivado</SelectItem>
+                {statusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </FormField>
@@ -1059,12 +1128,15 @@ function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVers
 // Smart Intake — Upload inteligente com IA, dedup e confirmação
 // ============================================================================
 
-function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved }: {
+function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, categorias, orgaos, responsaveis }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   userId: string | null;
   existing: Documento[];
   onSaved: () => Promise<void>;
+  categorias: string[];
+  orgaos: string[];
+  responsaveis: string[];
 }) {
   const extract = useServerFn(extractDocumentMetadata);
   const [step, setStep] = useState<"upload" | "analyzing" | "review">("upload");
@@ -1400,7 +1472,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved }: {
                 </FormField>
                 <FormField label="Categoria">
                   <div className={cls("categoria") + " rounded-md"}>
-                    <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={CATEGORIAS} placeholder="Selecione…" />
+                    <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
                   </div>
                 </FormField>
                 <div className="col-span-2">
@@ -1413,7 +1485,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved }: {
                 </FormField>
                 <FormField label="Órgão emissor">
                   <div className={cls("orgao_emissor") + " rounded-md"}>
-                    <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={ORGAOS} placeholder="Selecione…" />
+                    <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={orgaos} placeholder="Selecione…" />
                   </div>
                 </FormField>
                 <FormField label="Empresa / Razão social">
@@ -1426,7 +1498,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved }: {
                   <Input className={cls("uf")} value={f.uf} onChange={(e) => setF(s => ({ ...s, uf: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="SP" />
                 </FormField>
                 <FormField label="Responsável">
-                  <Input className={cls("responsavel")} value={f.responsavel} onChange={(e) => setF(s => ({ ...s, responsavel: e.target.value }))} />
+                  <div className={cls("responsavel") + " rounded-md"}>
+                    <SimpleCombo value={f.responsavel} setValue={(v) => setF(s => ({ ...s, responsavel: v }))} options={responsaveis} placeholder="Selecione…" />
+                  </div>
                 </FormField>
                 <FormField label="Emissão">
                   <Input type="date" className={cls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
@@ -1510,4 +1584,141 @@ function findDuplicate(docs: Documento[], f: { numero_documento?: string; nome?:
     if (nome && dNome && nome === dNome) return d;
   }
   return null;
+}
+
+function DocumentoOpcoesDialog({ open, onOpenChange, options, onChanged }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  options: DocumentoOpcao[];
+  onChanged: () => Promise<void>;
+}) {
+  const tipos: Array<{ value: DocumentoOpcaoTipo; label: string; valueLabel: string; valuePlaceholder: string; labelPlaceholder: string }> = [
+    { value: "categoria", label: "Categorias", valueLabel: "Valor", valuePlaceholder: "Licença Ambiental", labelPlaceholder: "Licença Ambiental" },
+    { value: "orgao", label: "Órgãos", valueLabel: "Valor", valuePlaceholder: "ANVISA", labelPlaceholder: "ANVISA" },
+    { value: "responsavel", label: "Responsáveis", valueLabel: "Valor", valuePlaceholder: "Maria Silva", labelPlaceholder: "Maria Silva" },
+    { value: "status", label: "Status", valueLabel: "Código", valuePlaceholder: "em_analise", labelPlaceholder: "Em análise" },
+    { value: "vencimento", label: "Vencimento", valueLabel: "Dias ou vencido", valuePlaceholder: "15", labelPlaceholder: "Em 15 dias" },
+  ];
+  const [tipo, setTipo] = useState<DocumentoOpcaoTipo>("categoria");
+  const [editing, setEditing] = useState<DocumentoOpcao | null>(null);
+  const [f, setF] = useState({ valor: "", label: "" });
+  const [saving, setSaving] = useState(false);
+
+  const tipoConfig = tipos.find(t => t.value === tipo) ?? tipos[0];
+  const filtered = options.filter(o => o.tipo === tipo).sort((a, b) => (a.label || a.valor).localeCompare(b.label || b.valor, "pt-BR"));
+
+  function resetForm() {
+    setEditing(null);
+    setF({ valor: "", label: "" });
+  }
+
+  async function save() {
+    const valor = f.valor.trim();
+    const label = f.label.trim() || valor;
+    if (!valor) { toast.error("Informe o valor"); return; }
+    if (tipo === "vencimento" && valor !== "vencido" && !/^\d+$/.test(valor)) {
+      toast.error("Use um número de dias ou o valor vencido");
+      return;
+    }
+    setSaving(true);
+    const payload = { tipo, valor, label };
+    let error;
+    if (editing) {
+      ({ error } = await supabase.from("documento_opcoes").update(payload).eq("id", editing.id));
+    } else {
+      ({ error } = await supabase.from("documento_opcoes").insert(payload));
+    }
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(editing ? "Opção atualizada" : "Opção criada");
+    resetForm();
+    await onChanged();
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Excluir esta opção?")) return;
+    const { error } = await supabase.from("documento_opcoes").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Opção excluída");
+    await onChanged();
+  }
+
+  function startEdit(o: DocumentoOpcao) {
+    setEditing(o);
+    setF({ valor: o.valor, label: o.label || o.valor });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Listas de documentos</DialogTitle>
+        </DialogHeader>
+
+        <Tabs value={tipo} onValueChange={(v) => { setTipo(v as DocumentoOpcaoTipo); resetForm(); }}>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
+            {tipos.map(t => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
+          </TabsList>
+
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+              <div>
+                <Label className="text-xs">{tipoConfig.valueLabel}</Label>
+                <Input value={f.valor} onChange={(e) => setF(s => ({ ...s, valor: e.target.value }))} placeholder={tipoConfig.valuePlaceholder} />
+              </div>
+              <div>
+                <Label className="text-xs">Exibição</Label>
+                <Input value={f.label} onChange={(e) => setF(s => ({ ...s, label: e.target.value }))} placeholder={tipoConfig.labelPlaceholder} />
+              </div>
+              <Button onClick={save} disabled={saving} className="whitespace-nowrap">
+                {editing ? "Salvar" : <><Plus className="h-4 w-4" /> Adicionar</>}
+              </Button>
+              {editing && (
+                <Button variant="ghost" onClick={resetForm}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Exibição</TableHead>
+                    <TableHead className="text-right w-[100px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground">Nenhuma opção cadastrada</TableCell>
+                    </TableRow>
+                  ) : filtered.map(o => (
+                    <TableRow key={o.id}>
+                      <TableCell className="font-mono text-xs">{o.valor}</TableCell>
+                      <TableCell>{o.label || o.valor}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => startEdit(o)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => remove(o.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </Tabs>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
