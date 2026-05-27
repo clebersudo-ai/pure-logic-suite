@@ -21,6 +21,7 @@ import {
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
   Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
+  ScanLine, CheckCircle2, FileSearch,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
