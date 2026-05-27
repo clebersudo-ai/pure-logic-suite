@@ -1,5 +1,6 @@
 import "./lib/error-capture";
 
+import { syncRuntimeEnv } from "./integrations/supabase/env";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -8,18 +9,6 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
-
-function syncRuntimeEnv(env: unknown) {
-  if (!env || typeof env !== "object" || typeof process === "undefined") return;
-
-  const runtimeEnv = process.env as Record<string, string | undefined>;
-  for (const [key, value] of Object.entries(env)) {
-    if (runtimeEnv[key] !== undefined) continue;
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      runtimeEnv[key] = String(value);
-    }
-  }
-}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
