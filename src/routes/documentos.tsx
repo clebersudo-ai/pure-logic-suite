@@ -127,6 +127,7 @@ function DocumentosPage() {
   const [selected, setSelected] = useState<Documento | null>(null);
   const [editing, setEditing] = useState<Documento | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [smartOpen, setSmartOpen] = useState(false);
 
   async function load() {
     setLoading(true);
