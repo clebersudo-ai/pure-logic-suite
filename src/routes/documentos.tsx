@@ -380,6 +380,16 @@ function DocumentosPage() {
         />
       )}
 
+      {smartOpen && (
+        <SmartIntakeDialog
+          open={smartOpen}
+          onOpenChange={setSmartOpen}
+          userId={user?.id ?? null}
+          existing={docs}
+          onSaved={async () => { setSmartOpen(false); await load(); }}
+        />
+      )}
+
       {selected && (
         <DocumentoDrawer
           documento={selected}
