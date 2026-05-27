@@ -53,6 +53,8 @@ type Documento = {
   empresa: string | null; unidade: string | null; responsavel: string | null;
   data_emissao: string | null; data_validade: string | null;
   renovacao_obrigatoria: boolean; criticidade: string; observacoes: string | null;
+  cnpj: string | null; uf: string | null; tipo_documento: string | null;
+  validado_ia: boolean; validado_em: string | null;
 };
 type Versao = {
   id: string; documento_id: string; versao: number; storage_path: string; nome_arquivo: string;
