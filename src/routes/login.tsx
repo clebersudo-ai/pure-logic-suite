@@ -39,8 +39,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.65_0.20_45/0.15),transparent_70%)]" />
+    <div className="flex min-h-screen items-center justify-center bg-white p-4">
       <Card className="relative z-10 w-full max-w-md p-8 shadow-2xl">
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
