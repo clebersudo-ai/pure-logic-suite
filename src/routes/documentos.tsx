@@ -10,6 +10,7 @@ import {
   Plus, Trash2, FormField, EmptyState, PageHeader, DataCard,
 } from "@/components/crud-ui";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
