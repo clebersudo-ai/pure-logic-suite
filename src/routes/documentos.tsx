@@ -1626,11 +1626,11 @@ function DocumentoOpcoesDialog({ open, onOpenChange, options, onChanged }: {
     if (editing) {
       ({ error } = await supabase.from("documento_opcoes").update(payload).eq("id", editing.id));
     } else {
-      ({ error } = await supabase.from("documento_opcoes").insert(payload));
+      ({ error } = await supabase.from("documento_opcoes").upsert(payload, { onConflict: "tipo,valor" }));
     }
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success(editing ? "Opção atualizada" : "Opção criada");
+    toast.success(editing ? "Opção atualizada" : "Opção salva");
     resetForm();
     await onChanged();
   }
