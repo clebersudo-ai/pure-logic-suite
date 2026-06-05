@@ -137,7 +137,7 @@ function fmtDate(s: string | null) {
   return new Date(s + "T00:00:00").toLocaleDateString("pt-BR");
 }
 
-const CHART_COLORS = ["hsl(var(--primary))", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
+const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
 function toOptionItem(o: DocumentoOpcao): OptionItem {
   return { value: o.valor, label: o.label || o.valor };
@@ -317,7 +317,9 @@ function DocumentosPage() {
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                    {porOrgao.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             )}
