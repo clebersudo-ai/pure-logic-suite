@@ -177,7 +177,7 @@ function toOptionItem(o: DocumentoOpcao): OptionItem {
 
 function optionTextItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fallback: string[]) {
   const saved = options.filter(o => o.tipo === tipo).map(o => o.label || o.valor);
-  return saved.length > 0 ? saved : fallback;
+  return Array.from(new Set([...fallback, ...saved]));
 }
 
 function optionValueItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fallback: OptionItem[]) {
