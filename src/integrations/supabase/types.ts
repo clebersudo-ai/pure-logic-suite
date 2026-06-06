@@ -177,6 +177,7 @@ export type Database = {
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
+          subcategoria: string | null
           tipo_documento: string | null
           uf: string | null
           unidade: string | null
@@ -203,6 +204,7 @@ export type Database = {
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
+          subcategoria?: string | null
           tipo_documento?: string | null
           uf?: string | null
           unidade?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
+          subcategoria?: string | null
           tipo_documento?: string | null
           uf?: string | null
           unidade?: string | null
