@@ -800,10 +800,23 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <Input className={aiCls("nome")} value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
             </FormField>
           </div>
-          <FormField label="Categoria">
+          <FormField label="Categoria (pasta principal)">
             <div className={aiCls("categoria") + " rounded-md"}>
-              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
+              <SimpleCombo
+                value={f.categoria}
+                setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
+                options={CATEGORIAS_PRINCIPAIS}
+                placeholder="Selecione a pasta…"
+              />
             </div>
+          </FormField>
+          <FormField label="Subcategoria (subpasta)">
+            <SimpleCombo
+              value={f.subcategoria}
+              setValue={(v) => setF(s => ({ ...s, subcategoria: v }))}
+              options={f.categoria ? (CATEGORIAS_TREE[f.categoria] ?? []) : []}
+              placeholder={f.categoria ? "Selecione a subpasta…" : "Escolha a categoria primeiro"}
+            />
           </FormField>
           <FormField label="Órgão emissor">
             <div className={aiCls("orgao_emissor") + " rounded-md"}>
