@@ -281,11 +281,17 @@ function DocumentosPage() {
     return Array.from(m.entries()).map(([name, value]) => ({ name, value }));
   }, [docs]);
 
-  const porOrgao = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of docs) m.set(d.orgao_emissor ?? "Sem órgão", (m.get(d.orgao_emissor ?? "Sem órgão") ?? 0) + 1);
-    return Array.from(m.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
-  }, [docs]);
+  const porVencimento = useMemo(() => {
+    return enriched
+      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && doc.status !== "arquivado")
+      .map(({ doc, dias }) => ({
+        name: doc.nome,
+        dias: Math.max(dias ?? 0, 0),
+        prioridade: dias ?? 999999,
+      }))
+      .sort((a, b) => a.prioridade - b.prioridade)
+      .slice(0, 8);
+  }, [enriched]);
 
   function limparFiltros() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
@@ -356,7 +362,7 @@ function DocumentosPage() {
       {/* Gráficos */}
       <div className="grid gap-4 lg:grid-cols-2">
         <DataCard>
-          <div className="border-b p-4">
+          <div className="border-b border-emerald-100 bg-emerald-50/70 p-4 text-center">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documentos por categoria</h3>
           </div>
           <div className="h-64 p-4">
@@ -373,19 +379,25 @@ function DocumentosPage() {
           </div>
         </DataCard>
         <DataCard>
-          <div className="border-b p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documentos por órgão emissor</h3>
+          <div className="border-b border-sky-100 bg-sky-50/70 p-4 text-center">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documentos por vencimento</h3>
           </div>
           <div className="h-64 p-4">
-            {porOrgao.length === 0 ? <EmptyState label="Sem dados" /> : (
+            {porVencimento.length === 0 ? <EmptyState label="Sem dados" /> : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={porOrgao} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <BarChart data={porVencimento} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 18 }}>
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                  <XAxis
+                    type="number"
+                    dataKey="dias"
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    label={{ value: "dia", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  />
+                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                   <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                    {porOrgao.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                  <Bar dataKey="dias" radius={[0, 4, 4, 0]}>
+                    {porVencimento.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
