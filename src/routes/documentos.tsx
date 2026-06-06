@@ -286,10 +286,40 @@ function DocumentosPage() {
   }, [docs]);
 
   function limparFiltros() {
-    setSearch(""); setFCategoria("__all"); setFOrgao("__all");
+    setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
     setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all");
   }
-  const hasFilter = search || [fCategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
+  const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
+
+  // contagem por categoria principal (para badges nas abas)
+  const countsPorCategoria = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of docs) {
+      if (d.categoria) m.set(d.categoria, (m.get(d.categoria) ?? 0) + 1);
+    }
+    return m;
+  }, [docs]);
+
+  // subcategorias disponíveis para a categoria ativa
+  const subcategoriasAtivas = useMemo(() => {
+    if (fCategoria === "__all") return [] as string[];
+    const fixas = CATEGORIAS_TREE[fCategoria] ?? [];
+    const existentes = Array.from(new Set(
+      docs.filter(d => d.categoria === fCategoria && d.subcategoria).map(d => d.subcategoria as string)
+    ));
+    return Array.from(new Set([...fixas, ...existentes]));
+  }, [fCategoria, docs]);
+
+  const countsPorSubcategoria = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of docs) {
+      if (d.categoria === fCategoria) {
+        const k = d.subcategoria ?? "";
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [docs, fCategoria]);
 
   return (
     <div className="space-y-6">
