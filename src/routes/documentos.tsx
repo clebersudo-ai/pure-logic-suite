@@ -630,6 +630,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
   const [f, setF] = useState({
     nome: documento?.nome ?? "",
     categoria: documento?.categoria ?? "",
+    subcategoria: documento?.subcategoria ?? "",
     orgao_emissor: documento?.orgao_emissor ?? "",
     numero_documento: documento?.numero_documento ?? "",
     empresa: documento?.empresa ?? "",
