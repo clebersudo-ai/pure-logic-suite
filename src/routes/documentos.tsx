@@ -289,6 +289,37 @@ function DocumentosPage() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
     setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all");
   }
+
+  async function excluirDocumento(doc: Documento) {
+    if (!canEdit) return;
+    if (!confirm(`Excluir o documento "${doc.nome}"? Todos os anexos e versões também serão removidos.`)) return;
+
+    const [versoesRes, anexosRes] = await Promise.all([
+      supabase.from("documento_versoes").select("storage_path").eq("documento_id", doc.id),
+      supabase.from("documento_anexos").select("storage_path").eq("documento_id", doc.id),
+    ]);
+    if (versoesRes.error) { toast.error(versoesRes.error.message); return; }
+    if (anexosRes.error) { toast.error(anexosRes.error.message); return; }
+
+    const paths = [
+      ...((versoesRes.data ?? []) as Array<{ storage_path: string | null }>),
+      ...((anexosRes.data ?? []) as Array<{ storage_path: string | null }>),
+    ].map(item => item.storage_path).filter(Boolean) as string[];
+
+    if (paths.length > 0) {
+      const { error: storageError } = await supabase.storage.from(BUCKET).remove(paths);
+      if (storageError) { toast.error(storageError.message); return; }
+    }
+
+    const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
+    if (error) { toast.error(error.message); return; }
+
+    toast.success("Documento excluído");
+    if (selected?.id === doc.id) setSelected(null);
+    if (editing?.id === doc.id) setEditing(null);
+    await load();
+  }
+
   const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
 
   // contagem por categoria principal (para badges nas abas)
@@ -517,9 +548,14 @@ function DocumentosPage() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {canEdit && (
-                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(doc); setFormOpen(true); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(doc); setFormOpen(true); }} title="Editar">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); excluirDocumento(doc); }} title="Excluir documento">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
                       )}
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(doc); }}>
                         <Eye className="h-4 w-4" /> Abrir
@@ -575,6 +611,7 @@ function DocumentosPage() {
           canEdit={canEdit}
           onClose={() => setSelected(null)}
           onChanged={async () => { await load(); }}
+          onDelete={excluirDocumento}
         />
       )}
     </div>
@@ -905,8 +942,9 @@ function SimpleCombo({ value, setValue, options, placeholder }: {
   );
 }
 
-function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
+function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete }: {
   documento: Documento; canEdit: boolean; onClose: () => void; onChanged: () => Promise<void>;
+  onDelete: (doc: Documento) => Promise<void>;
 }) {
   const { user } = useAuth();
   const [doc, setDoc] = useState(documento);
@@ -1073,6 +1111,9 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged }: {
                 </Button>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => anexoInputRef.current?.click()}>
                   <Paperclip className="h-4 w-4" /> Adicionar anexos
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDelete(doc)}>
+                  <Trash2 className="h-4 w-4 text-destructive" /> Excluir documento
                 </Button>
               </>
             )}
