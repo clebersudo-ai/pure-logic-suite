@@ -424,8 +424,8 @@ function DocumentosPage() {
 
       {/* Abas por categoria principal */}
       <DataCard>
-        <div className="border-b px-4 py-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Categorias</h3>
+        <div className="border-b bg-sky-50 px-4 py-3 text-center">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-sky-700">Categorias</h3>
         </div>
         <div className="flex flex-wrap gap-1.5 border-b p-2">
           <button
