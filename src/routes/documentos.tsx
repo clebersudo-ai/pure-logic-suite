@@ -245,6 +245,7 @@ function DocumentosPage() {
         if (!hay.includes(q)) return false;
       }
       if (fCategoria !== "__all" && doc.categoria !== fCategoria) return false;
+      if (fSubcategoria !== "__all" && (doc.subcategoria ?? "") !== fSubcategoria) return false;
       if (fOrgao !== "__all" && doc.orgao_emissor !== fOrgao) return false;
       if (fResponsavel !== "__all" && doc.responsavel !== fResponsavel) return false;
       if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao) return false;
@@ -258,7 +259,7 @@ function DocumentosPage() {
       }
       return true;
     });
-  }, [enriched, search, fCategoria, fOrgao, fResponsavel, fSituacao, fVencimento]);
+  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento]);
 
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
