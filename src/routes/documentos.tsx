@@ -1023,6 +1023,24 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
     await loadAll();
   }
 
+  async function removerVersao(v: Versao) {
+    if (!confirm(`Excluir a versão v${v.versao}? O arquivo será excluído do repositório.`)) return;
+    await supabase.storage.from(BUCKET).remove([v.storage_path]);
+    const { error } = await supabase.from("documento_versoes").delete().eq("id", v.id);
+    if (error) { toast.error(error.message); return; }
+
+    const restantes = versoes.filter(item => item.id !== v.id).sort((a, b) => b.versao - a.versao);
+    if (v.versao === doc.versao_atual) {
+      const proximaVersao = restantes[0]?.versao ?? 0;
+      const { error: updateError } = await supabase.from("documentos").update({ versao_atual: proximaVersao }).eq("id", doc.id);
+      if (updateError) { toast.error(updateError.message); return; }
+    }
+
+    toast.success("Versão removida");
+    await loadAll();
+    await onChanged();
+  }
+
   function onDrop(e: React.DragEvent, kind: "versao" | "anexo") {
     e.preventDefault(); setDragOver(false);
     if (!canEdit) return;
@@ -1117,11 +1135,22 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
             </div>
           )}
 
-          <Tabs defaultValue="anexos">
+          <Tabs defaultValue="versoes">
             <TabsList>
-              <TabsTrigger value="anexos"><Paperclip className="h-3.5 w-3.5" /> Anexos ({anexos.length})</TabsTrigger>
               <TabsTrigger value="versoes"><History className="h-3.5 w-3.5" /> Histórico de versões ({versoes.length})</TabsTrigger>
+              <TabsTrigger value="anexos"><Paperclip className="h-3.5 w-3.5" /> Anexos ({anexos.length})</TabsTrigger>
             </TabsList>
+            <TabsContent value="versoes">
+              <FileList
+                items={versoes.map(v => ({ ...v, versaoLabel: v.versao }))}
+                currentVersion={doc.versao_atual}
+                onPreview={previewFile}
+                onDownload={(p) => openFile(p, true)}
+                onRemove={canEdit ? removerVersao : undefined}
+                emptyLabel="Nenhuma versão registrada. Clique em Nova versão para iniciar."
+                showVersion
+              />
+            </TabsContent>
             <TabsContent value="anexos">
               <FileList
                 items={anexos}
@@ -1130,16 +1159,6 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
                 onDownload={(p) => openFile(p, true)}
                 onRemove={canEdit ? removerAnexo : undefined}
                 emptyLabel="Nenhum anexo. Arraste arquivos ou clique em Adicionar anexos."
-              />
-            </TabsContent>
-            <TabsContent value="versoes">
-              <FileList
-                items={versoes.map(v => ({ ...v, versaoLabel: v.versao }))}
-                currentVersion={doc.versao_atual}
-                onPreview={previewFile}
-                onDownload={(p) => openFile(p, true)}
-                emptyLabel="Nenhuma versão registrada. Clique em Nova versão para iniciar."
-                showVersion
               />
             </TabsContent>
           </Tabs>
@@ -1194,10 +1213,10 @@ function fileTypeLabel(name: string) {
 }
 
 function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVersion, currentVersion }: {
-  items: Array<Anexo & { versaoLabel?: number }>;
+  items: Array<(Anexo | Versao) & { versaoLabel?: number }>;
   onPreview: (it: { storage_path: string; nome_arquivo: string }) => void;
   onDownload: (path: string) => void;
-  onRemove?: (a: Anexo) => void;
+  onRemove?: (item: Anexo | Versao) => void;
   emptyLabel: string;
   showVersion?: boolean;
   currentVersion?: number | null;
@@ -1246,8 +1265,8 @@ function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVers
                 <Download className="h-4 w-4" />
               </Button>
               {onRemove && (
-                <Button size="sm" variant="outline" onClick={() => onRemove(it)} title="Excluir somente este anexo">
-                  <Trash2 className="h-4 w-4 text-destructive" /> Excluir anexo
+                <Button size="sm" variant="outline" onClick={() => onRemove(it)} title={showVersion ? "Excluir esta versão" : "Excluir somente este anexo"}>
+                  <Trash2 className="h-4 w-4 text-destructive" /> {showVersion ? "Excluir versão" : "Excluir anexo"}
                 </Button>
               )}
             </div>
