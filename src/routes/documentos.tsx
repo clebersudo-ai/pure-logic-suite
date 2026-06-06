@@ -705,6 +705,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     const payload: any = {
       nome: f.nome,
       categoria: f.categoria || null,
+      subcategoria: f.subcategoria || null,
       orgao_emissor: f.orgao_emissor || null,
       numero_documento: f.numero_documento || null,
       empresa: f.empresa || null,
