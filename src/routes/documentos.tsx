@@ -49,8 +49,39 @@ type OptionItem = { value: string; label: string };
 
 type DocumentoOpcaoTipo = "categoria" | "orgao" | "responsavel" | "status" | "vencimento";
 
-const DEFAULT_CATEGORIAS = ["Licença Ambiental", "Sanitária", "Bombeiros", "Fiscal", "Trabalhista", "Qualidade", "RH", "ANVISA", "IBAMA", "Outros"];
-const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "Vigilância Sanitária", "Corpo de Bombeiros", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Outros"];
+// Estrutura hierárquica de pastas (Categoria → Subcategoria)
+const CATEGORIAS_TREE: Record<string, string[]> = {
+  "EMPRESARIAL": [
+    "Contrato Social", "Alterações Contratuais", "CNPJ",
+    "Inscrição Estadual", "Inscrição Municipal", "Certificados Digitais",
+  ],
+  "REGULATÓRIO": [
+    "AFE - ANVISA", "CRQ", "CETESB", "CADRI", "IBAMA",
+    "Controle de Resíduos - CETESB", "Vigilância Sanitária Municipal",
+    "VRE / Via Rápida Empresa", "Corpo de Bombeiros",
+    "Alvará de Funcionamento Prefeitura",
+    "Polícia Civil", "Polícia Federal", "Exército",
+  ],
+  "QUALIDADE": [
+    "POP", "IT", "Manual da Qualidade", "Registros CQ",
+    "FISPQ", "Boletins Técnicos", "Treinamentos",
+  ],
+  "FISCAL / CONTÁBIL": [
+    "Certidões", "Débitos", "Balancetes", "SPED", "Simples Nacional",
+  ],
+  "MAPAS CONTROLADOS": [
+    "MAPA Produtos Controlados",
+  ],
+  "ADMINISTRATIVO": [
+    "Contratos", "Procurações",
+  ],
+  "FUNCIONÁRIOS / TRABALHISTA": [
+    "Documentos Funcionários", "PGR", "PCMSO", "LTCAT", "ASO",
+  ],
+};
+const CATEGORIAS_PRINCIPAIS = Object.keys(CATEGORIAS_TREE);
+const DEFAULT_CATEGORIAS = CATEGORIAS_PRINCIPAIS;
+const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "CADRI", "Vigilância Sanitária", "Corpo de Bombeiros", "Polícia Civil", "Polícia Federal", "Exército", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Junta Comercial", "Outros"];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
   { value: "em_renovacao", label: "Em renovação" },
@@ -72,6 +103,7 @@ const CRITICIDADES = [
 
 type Documento = {
   id: string; nome: string; descricao: string | null; categoria: string | null;
+  subcategoria: string | null;
   status: string; versao_atual: number; created_at: string; updated_at: string;
   orgao_emissor: string | null; numero_documento: string | null;
   empresa: string | null; unidade: string | null; responsavel: string | null;
@@ -161,6 +193,7 @@ function DocumentosPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [fCategoria, setFCategoria] = useState("__all");
+  const [fSubcategoria, setFSubcategoria] = useState<string>("__all");
   const [fOrgao, setFOrgao] = useState("__all");
   const [fResponsavel, setFResponsavel] = useState("__all");
   const [fSituacao, setFSituacao] = useState("__all");
@@ -212,6 +245,7 @@ function DocumentosPage() {
         if (!hay.includes(q)) return false;
       }
       if (fCategoria !== "__all" && doc.categoria !== fCategoria) return false;
+      if (fSubcategoria !== "__all" && (doc.subcategoria ?? "") !== fSubcategoria) return false;
       if (fOrgao !== "__all" && doc.orgao_emissor !== fOrgao) return false;
       if (fResponsavel !== "__all" && doc.responsavel !== fResponsavel) return false;
       if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao) return false;
@@ -225,7 +259,7 @@ function DocumentosPage() {
       }
       return true;
     });
-  }, [enriched, search, fCategoria, fOrgao, fResponsavel, fSituacao, fVencimento]);
+  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento]);
 
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
@@ -252,10 +286,40 @@ function DocumentosPage() {
   }, [docs]);
 
   function limparFiltros() {
-    setSearch(""); setFCategoria("__all"); setFOrgao("__all");
+    setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
     setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all");
   }
-  const hasFilter = search || [fCategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
+  const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
+
+  // contagem por categoria principal (para badges nas abas)
+  const countsPorCategoria = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of docs) {
+      if (d.categoria) m.set(d.categoria, (m.get(d.categoria) ?? 0) + 1);
+    }
+    return m;
+  }, [docs]);
+
+  // subcategorias disponíveis para a categoria ativa
+  const subcategoriasAtivas = useMemo(() => {
+    if (fCategoria === "__all") return [] as string[];
+    const fixas = CATEGORIAS_TREE[fCategoria] ?? [];
+    const existentes = Array.from(new Set(
+      docs.filter(d => d.categoria === fCategoria && d.subcategoria).map(d => d.subcategoria as string)
+    ));
+    return Array.from(new Set([...fixas, ...existentes]));
+  }, [fCategoria, docs]);
+
+  const countsPorSubcategoria = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of docs) {
+      if (d.categoria === fCategoria) {
+        const k = d.subcategoria ?? "";
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [docs, fCategoria]);
 
   return (
     <div className="space-y-6">
@@ -327,8 +391,49 @@ function DocumentosPage() {
         </DataCard>
       </div>
 
-      {/* Tabela com filtros */}
+      {/* Abas por categoria principal */}
       <DataCard>
+        <div className="flex flex-wrap gap-1.5 border-b p-2">
+          <button
+            type="button"
+            onClick={() => { setFCategoria("__all"); setFSubcategoria("__all"); }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${fCategoria === "__all" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Todos <span className="ml-1 opacity-70">({docs.length})</span>
+          </button>
+          {CATEGORIAS_PRINCIPAIS.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => { setFCategoria(cat); setFSubcategoria("__all"); }}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${fCategoria === cat ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              {cat} <span className="ml-1 opacity-70">({countsPorCategoria.get(cat) ?? 0})</span>
+            </button>
+          ))}
+        </div>
+        {fCategoria !== "__all" && subcategoriasAtivas.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-b bg-muted/30 p-2">
+            <button
+              type="button"
+              onClick={() => setFSubcategoria("__all")}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${fSubcategoria === "__all" ? "bg-foreground text-background" : "border bg-background hover:bg-muted"}`}
+            >
+              Todas subpastas
+            </button>
+            {subcategoriasAtivas.map(sub => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setFSubcategoria(sub)}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${fSubcategoria === sub ? "bg-foreground text-background" : "border bg-background hover:bg-muted"}`}
+              >
+                {sub} <span className="ml-1 opacity-60">({countsPorSubcategoria.get(sub) ?? 0})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-3 border-b p-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[240px] flex-1">
@@ -341,13 +446,13 @@ function DocumentosPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <FilterPill icon={Filter} label="Categoria" value={fCategoria} setValue={setFCategoria} options={categorias} />
             <FilterPill icon={Building2} label="Órgão" value={fOrgao} setValue={setFOrgao} options={orgaos} />
             <FilterPill label="Responsável" value={fResponsavel} setValue={setFResponsavel} options={responsaveis} />
             <FilterPill label="Status" value={fSituacao} setValue={(v) => setFSituacao(v as any)} options={statusOpcoes} />
             <FilterPill icon={CalendarClock} label="Vencimento" value={fVencimento} setValue={(v) => setFVencimento(v as any)} options={vencimentoOpcoes} />
           </div>
         </div>
+
 
         <Table>
           <TableHeader>
@@ -385,7 +490,10 @@ function DocumentosPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">{doc.categoria ?? "—"}</div>
+                    <div className="text-sm">
+                      {doc.categoria ?? "—"}
+                      {doc.subcategoria && <span className="text-muted-foreground"> › {doc.subcategoria}</span>}
+                    </div>
                     <div className="text-xs text-muted-foreground">{doc.orgao_emissor ?? "—"}</div>
                   </TableCell>
                   <TableCell>
@@ -525,6 +633,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
   const [f, setF] = useState({
     nome: documento?.nome ?? "",
     categoria: documento?.categoria ?? "",
+    subcategoria: documento?.subcategoria ?? "",
     orgao_emissor: documento?.orgao_emissor ?? "",
     numero_documento: documento?.numero_documento ?? "",
     empresa: documento?.empresa ?? "",
@@ -599,6 +708,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     const payload: any = {
       nome: f.nome,
       categoria: f.categoria || null,
+      subcategoria: f.subcategoria || null,
       orgao_emissor: f.orgao_emissor || null,
       numero_documento: f.numero_documento || null,
       empresa: f.empresa || null,
@@ -693,10 +803,23 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <Input className={aiCls("nome")} value={f.nome} onChange={(e) => setF(s => ({ ...s, nome: e.target.value }))} placeholder="Ex.: Licença de Operação 2026" />
             </FormField>
           </div>
-          <FormField label="Categoria">
+          <FormField label="Categoria (pasta principal)">
             <div className={aiCls("categoria") + " rounded-md"}>
-              <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
+              <SimpleCombo
+                value={f.categoria}
+                setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
+                options={CATEGORIAS_PRINCIPAIS}
+                placeholder="Selecione a pasta…"
+              />
             </div>
+          </FormField>
+          <FormField label="Subcategoria (subpasta)">
+            <SimpleCombo
+              value={f.subcategoria}
+              setValue={(v) => setF(s => ({ ...s, subcategoria: v }))}
+              options={f.categoria ? (CATEGORIAS_TREE[f.categoria] ?? []) : []}
+              placeholder={f.categoria ? "Selecione a subpasta…" : "Escolha a categoria primeiro"}
+            />
           </FormField>
           <FormField label="Órgão emissor">
             <div className={aiCls("orgao_emissor") + " rounded-md"}>
@@ -1153,7 +1276,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
 
   const [f, setF] = useState({
     tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
-    categoria: "", data_emissao: "", data_validade: "", empresa: "",
+    categoria: "", subcategoria: "", data_emissao: "", data_validade: "", empresa: "",
     cnpj: "", uf: "", responsavel: "", observacoes: "",
     criticidade: "media", renovacao_obrigatoria: false,
   });
@@ -1253,6 +1376,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
           categoria: f.categoria || null,
+          subcategoria: f.subcategoria || null,
           orgao_emissor: f.orgao_emissor || null,
           numero_documento: f.numero_documento || null,
           empresa: f.empresa || null,
@@ -1277,6 +1401,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
           categoria: f.categoria || null,
+          subcategoria: f.subcategoria || null,
           orgao_emissor: f.orgao_emissor || null,
           numero_documento: f.numero_documento || null,
           empresa: f.empresa || null,
@@ -1472,10 +1597,23 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <FormField label="Tipo de documento">
                   <Input className={cls("tipo_documento")} value={f.tipo_documento} onChange={(e) => setF(s => ({ ...s, tipo_documento: e.target.value }))} placeholder="Ex.: AFE ANVISA" />
                 </FormField>
-                <FormField label="Categoria">
+                <FormField label="Categoria (pasta)">
                   <div className={cls("categoria") + " rounded-md"}>
-                    <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
+                    <SimpleCombo
+                      value={f.categoria}
+                      setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
+                      options={CATEGORIAS_PRINCIPAIS}
+                      placeholder="Selecione…"
+                    />
                   </div>
+                </FormField>
+                <FormField label="Subcategoria">
+                  <SimpleCombo
+                    value={f.subcategoria}
+                    setValue={(v) => setF(s => ({ ...s, subcategoria: v }))}
+                    options={f.categoria ? (CATEGORIAS_TREE[f.categoria] ?? []) : []}
+                    placeholder={f.categoria ? "Selecione a subpasta…" : "Escolha a categoria primeiro"}
+                  />
                 </FormField>
                 <div className="col-span-2">
                   <FormField label="Nome do documento *">
