@@ -1796,8 +1796,15 @@ function DocumentoOpcoesDialog({ open, onOpenChange, options, onChanged }: {
     setF({ valor: "", label: "" });
   }
 
+  function updateLabel(label: string) {
+    setF(s => ({
+      label,
+      valor: !s.valor || s.valor === s.label ? label : s.valor,
+    }));
+  }
+
   async function save() {
-    const valor = f.valor.trim();
+    const valor = (f.valor.trim() || f.label.trim());
     const label = f.label.trim() || valor;
     if (!valor) { toast.error("Informe o valor"); return; }
     if (tipo === "vencimento" && valor !== "vencido" && !/^\d+$/.test(valor)) {
@@ -1847,12 +1854,12 @@ function DocumentoOpcoesDialog({ open, onOpenChange, options, onChanged }: {
           <div className="mt-4 space-y-4">
             <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
               <div>
-                <Label className="text-xs">{tipoConfig.valueLabel}</Label>
-                <Input value={f.valor} onChange={(e) => setF(s => ({ ...s, valor: e.target.value }))} placeholder={tipoConfig.valuePlaceholder} />
+                <Label className="text-xs">Exibição</Label>
+                <Input value={f.label} onChange={(e) => updateLabel(e.target.value)} placeholder={tipoConfig.labelPlaceholder} />
               </div>
               <div>
-                <Label className="text-xs">Exibição</Label>
-                <Input value={f.label} onChange={(e) => setF(s => ({ ...s, label: e.target.value }))} placeholder={tipoConfig.labelPlaceholder} />
+                <Label className="text-xs">{tipoConfig.valueLabel}</Label>
+                <Input value={f.valor} onChange={(e) => setF(s => ({ ...s, valor: e.target.value }))} placeholder={tipoConfig.valuePlaceholder} />
               </div>
               <Button onClick={save} disabled={saving} className="whitespace-nowrap">
                 {editing ? "Salvar" : <><Plus className="h-4 w-4" /> Adicionar</>}
