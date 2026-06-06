@@ -193,6 +193,7 @@ function DocumentosPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [fCategoria, setFCategoria] = useState("__all");
+  const [fSubcategoria, setFSubcategoria] = useState<string>("__all");
   const [fOrgao, setFOrgao] = useState("__all");
   const [fResponsavel, setFResponsavel] = useState("__all");
   const [fSituacao, setFSituacao] = useState("__all");
