@@ -49,8 +49,39 @@ type OptionItem = { value: string; label: string };
 
 type DocumentoOpcaoTipo = "categoria" | "orgao" | "responsavel" | "status" | "vencimento";
 
-const DEFAULT_CATEGORIAS = ["Licença Ambiental", "Sanitária", "Bombeiros", "Fiscal", "Trabalhista", "Qualidade", "RH", "ANVISA", "IBAMA", "Outros"];
-const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "Vigilância Sanitária", "Corpo de Bombeiros", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Outros"];
+// Estrutura hierárquica de pastas (Categoria → Subcategoria)
+const CATEGORIAS_TREE: Record<string, string[]> = {
+  "EMPRESARIAL": [
+    "Contrato Social", "Alterações Contratuais", "CNPJ",
+    "Inscrição Estadual", "Inscrição Municipal", "Certificados Digitais",
+  ],
+  "REGULATÓRIO": [
+    "AFE - ANVISA", "CRQ", "CETESB", "CADRI", "IBAMA",
+    "Controle de Resíduos - CETESB", "Vigilância Sanitária Municipal",
+    "VRE / Via Rápida Empresa", "Corpo de Bombeiros",
+    "Alvará de Funcionamento Prefeitura",
+    "Polícia Civil", "Polícia Federal", "Exército",
+  ],
+  "QUALIDADE": [
+    "POP", "IT", "Manual da Qualidade", "Registros CQ",
+    "FISPQ", "Boletins Técnicos", "Treinamentos",
+  ],
+  "FISCAL / CONTÁBIL": [
+    "Certidões", "Débitos", "Balancetes", "SPED", "Simples Nacional",
+  ],
+  "MAPAS CONTROLADOS": [
+    "MAPA Produtos Controlados",
+  ],
+  "ADMINISTRATIVO": [
+    "Contratos", "Procurações",
+  ],
+  "FUNCIONÁRIOS / TRABALHISTA": [
+    "Documentos Funcionários", "PGR", "PCMSO", "LTCAT", "ASO",
+  ],
+};
+const CATEGORIAS_PRINCIPAIS = Object.keys(CATEGORIAS_TREE);
+const DEFAULT_CATEGORIAS = CATEGORIAS_PRINCIPAIS;
+const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "CADRI", "Vigilância Sanitária", "Corpo de Bombeiros", "Polícia Civil", "Polícia Federal", "Exército", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Junta Comercial", "Outros"];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
   { value: "em_renovacao", label: "Em renovação" },
