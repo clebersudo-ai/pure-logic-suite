@@ -292,36 +292,6 @@ function DocumentosPage() {
     setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all");
   }
 
-  async function excluirDocumento(doc: Documento) {
-    if (!canEdit) return;
-    if (!confirm(`Excluir o documento "${doc.nome}"? Todos os anexos e versões também serão removidos.`)) return;
-
-    const [versoesRes, anexosRes] = await Promise.all([
-      supabase.from("documento_versoes").select("storage_path").eq("documento_id", doc.id),
-      supabase.from("documento_anexos").select("storage_path").eq("documento_id", doc.id),
-    ]);
-    if (versoesRes.error) { toast.error(versoesRes.error.message); return; }
-    if (anexosRes.error) { toast.error(anexosRes.error.message); return; }
-
-    const paths = [
-      ...((versoesRes.data ?? []) as Array<{ storage_path: string | null }>),
-      ...((anexosRes.data ?? []) as Array<{ storage_path: string | null }>),
-    ].map(item => item.storage_path).filter(Boolean) as string[];
-
-    if (paths.length > 0) {
-      const { error: storageError } = await supabase.storage.from(BUCKET).remove(paths);
-      if (storageError) { toast.error(storageError.message); return; }
-    }
-
-    const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
-    if (error) { toast.error(error.message); return; }
-
-    toast.success("Documento excluído");
-    if (selected?.id === doc.id) setSelected(null);
-    if (editing?.id === doc.id) setEditing(null);
-    await load();
-  }
-
   const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
 
   // contagem por categoria principal (para badges nas abas)
@@ -606,7 +576,6 @@ function DocumentosPage() {
           canEdit={canEdit}
           onClose={() => setSelected(null)}
           onChanged={async () => { await load(); }}
-          onDelete={excluirDocumento}
           onEdit={(doc) => { setEditing(doc); setFormOpen(true); }}
         />
       )}
@@ -938,9 +907,8 @@ function SimpleCombo({ value, setValue, options, placeholder }: {
   );
 }
 
-function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete, onEdit }: {
+function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
   documento: Documento; canEdit: boolean; onClose: () => void; onChanged: () => Promise<void>;
-  onDelete: (doc: Documento) => Promise<void>;
   onEdit: (doc: Documento) => void;
 }) {
   const { user } = useAuth();
@@ -1115,9 +1083,6 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete, onE
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => anexoInputRef.current?.click()}>
                   <Paperclip className="h-4 w-4" /> Adicionar anexos
                 </Button>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => onDelete(doc)}>
-                  <Trash2 className="h-4 w-4 text-destructive" /> Excluir documento
-                </Button>
               </>
             )}
             <input ref={versionInputRef} type="file" multiple accept={ACCEPT} className="hidden" onChange={(e) => uploadFiles(e.target.files, "versao")} />
@@ -1281,8 +1246,8 @@ function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVers
                 <Download className="h-4 w-4" />
               </Button>
               {onRemove && (
-                <Button size="sm" variant="ghost" onClick={() => onRemove(it)} title="Remover">
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                <Button size="sm" variant="outline" onClick={() => onRemove(it)} title="Excluir somente este anexo">
+                  <Trash2 className="h-4 w-4 text-destructive" /> Excluir anexo
                 </Button>
               )}
             </div>
