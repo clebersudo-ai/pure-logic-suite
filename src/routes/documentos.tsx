@@ -22,7 +22,7 @@ import {
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
   Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
-  ScanLine, CheckCircle2, FileSearch, Settings,
+  ScanLine, CheckCircle2, FileSearch, Settings, ClipboardList,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
@@ -559,6 +559,9 @@ function DocumentosPage() {
                           </Button>
                           <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); excluirDocumento(doc); }} title="Excluir documento">
                             <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); toast.info("Instruções para renovação serão adicionadas na próxima etapa."); }} title="Instruções para renovação">
+                            <ClipboardList className="h-4 w-4" /> Instruções
                           </Button>
                         </>
                       )}
