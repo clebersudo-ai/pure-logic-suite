@@ -125,6 +125,7 @@ function situacaoFrom(d: Documento): Situacao {
   if (d.status === "arquivado") return "arquivado";
   if (d.status === "em_renovacao") return "atencao";
   if (!d.data_validade) return "sem_validade";
+  if (!d.renovacao_obrigatoria) return "ativo";
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const v = new Date(d.data_validade + "T00:00:00");
   const dias = Math.ceil((v.getTime() - hoje.getTime()) / 86400000);
@@ -251,6 +252,7 @@ function DocumentosPage() {
       if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao) return false;
       if (fVencimento !== "__all") {
         if (dias == null) return false;
+        if (!doc.renovacao_obrigatoria) return false;
         if (fVencimento === "vencido") { if (dias >= 0) return false; }
         else {
           const limite = Number(fVencimento);
