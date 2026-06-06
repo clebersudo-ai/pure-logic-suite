@@ -490,7 +490,10 @@ function DocumentosPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">{doc.categoria ?? "—"}</div>
+                    <div className="text-sm">
+                      {doc.categoria ?? "—"}
+                      {doc.subcategoria && <span className="text-muted-foreground"> › {doc.subcategoria}</span>}
+                    </div>
                     <div className="text-xs text-muted-foreground">{doc.orgao_emissor ?? "—"}</div>
                   </TableCell>
                   <TableCell>
