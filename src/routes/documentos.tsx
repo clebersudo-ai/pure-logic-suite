@@ -1276,7 +1276,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
 
   const [f, setF] = useState({
     tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
-    categoria: "", data_emissao: "", data_validade: "", empresa: "",
+    categoria: "", subcategoria: "", data_emissao: "", data_validade: "", empresa: "",
     cnpj: "", uf: "", responsavel: "", observacoes: "",
     criticidade: "media", renovacao_obrigatoria: false,
   });
