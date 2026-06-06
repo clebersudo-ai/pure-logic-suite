@@ -552,19 +552,6 @@ function DocumentosPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      {canEdit && (
-                        <>
-                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(doc); setFormOpen(true); }} title="Editar">
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); excluirDocumento(doc); }} title="Excluir documento">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); toast.info("Instruções para renovação serão adicionadas na próxima etapa."); }} title="Instruções para renovação">
-                            <ClipboardList className="h-4 w-4" /> Instruções
-                          </Button>
-                        </>
-                      )}
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(doc); }}>
                         <Eye className="h-4 w-4" /> Abrir
                       </Button>
@@ -620,6 +607,7 @@ function DocumentosPage() {
           onClose={() => setSelected(null)}
           onChanged={async () => { await load(); }}
           onDelete={excluirDocumento}
+          onEdit={(doc) => { setEditing(doc); setFormOpen(true); }}
         />
       )}
     </div>
@@ -950,9 +938,10 @@ function SimpleCombo({ value, setValue, options, placeholder }: {
   );
 }
 
-function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete }: {
+function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete, onEdit }: {
   documento: Documento; canEdit: boolean; onClose: () => void; onChanged: () => Promise<void>;
   onDelete: (doc: Documento) => Promise<void>;
+  onEdit: (doc: Documento) => void;
 }) {
   const { user } = useAuth();
   const [doc, setDoc] = useState(documento);
@@ -1114,6 +1103,12 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onDelete }: {
             </Button>
             {canEdit && (
               <>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => onEdit(doc)}>
+                  <Pencil className="h-4 w-4" /> Editar
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => toast.info("Instruções para renovação serão adicionadas na próxima etapa.")}>
+                  <ClipboardList className="h-4 w-4" /> Instruções
+                </Button>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => versionInputRef.current?.click()}>
                   <Upload className="h-4 w-4" /> Nova versão
                 </Button>
