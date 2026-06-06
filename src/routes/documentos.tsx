@@ -424,6 +424,9 @@ function DocumentosPage() {
 
       {/* Abas por categoria principal */}
       <DataCard>
+        <div className="border-b px-4 py-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Categorias</h3>
+        </div>
         <div className="flex flex-wrap gap-1.5 border-b p-2">
           <button
             type="button"
@@ -432,7 +435,7 @@ function DocumentosPage() {
           >
             Todos <span className="ml-1 opacity-70">({docs.length})</span>
           </button>
-          {CATEGORIAS_PRINCIPAIS.map(cat => (
+          {categorias.map(cat => (
             <button
               key={cat}
               type="button"
@@ -845,7 +848,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <SimpleCombo
                 value={f.categoria}
                 setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
-                options={CATEGORIAS_PRINCIPAIS}
+                options={categorias}
                 placeholder="Selecione a pasta…"
               />
             </div>
@@ -1643,7 +1646,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                     <SimpleCombo
                       value={f.categoria}
                       setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
-                      options={CATEGORIAS_PRINCIPAIS}
+                      options={categorias}
                       placeholder="Selecione…"
                     />
                   </div>
