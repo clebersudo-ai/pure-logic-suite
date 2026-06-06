@@ -1277,8 +1277,15 @@ function FileList({ items, onPreview, onDownload, onRemove, emptyLabel, showVers
                 <Download className="h-4 w-4" />
               </Button>
               {onRemove && (
-                <Button size="sm" variant="outline" onClick={() => onRemove(it)} title={showVersion ? "Excluir esta versão" : "Excluir somente este anexo"}>
-                  <Trash2 className="h-4 w-4 text-destructive" /> {showVersion ? "Excluir versão" : "Excluir anexo"}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-destructive hover:bg-transparent hover:text-destructive"
+                  onClick={() => onRemove(it)}
+                  title={showVersion ? "Excluir esta versão" : "Excluir somente este anexo"}
+                  aria-label={showVersion ? "Excluir esta versão" : "Excluir somente este anexo"}
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -1890,8 +1897,15 @@ function DocumentoOpcoesDialog({ open, onOpenChange, options, onChanged }: {
                           <Button size="sm" variant="ghost" onClick={() => startEdit(o)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => remove(o.id)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-destructive hover:bg-transparent hover:text-destructive"
+                            onClick={() => remove(o.id)}
+                            title="Excluir esta opção"
+                            aria-label="Excluir esta opção"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
