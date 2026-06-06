@@ -1597,10 +1597,23 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <FormField label="Tipo de documento">
                   <Input className={cls("tipo_documento")} value={f.tipo_documento} onChange={(e) => setF(s => ({ ...s, tipo_documento: e.target.value }))} placeholder="Ex.: AFE ANVISA" />
                 </FormField>
-                <FormField label="Categoria">
+                <FormField label="Categoria (pasta)">
                   <div className={cls("categoria") + " rounded-md"}>
-                    <SimpleCombo value={f.categoria} setValue={(v) => setF(s => ({ ...s, categoria: v }))} options={categorias} placeholder="Selecione…" />
+                    <SimpleCombo
+                      value={f.categoria}
+                      setValue={(v) => setF(s => ({ ...s, categoria: v, subcategoria: "" }))}
+                      options={CATEGORIAS_PRINCIPAIS}
+                      placeholder="Selecione…"
+                    />
                   </div>
+                </FormField>
+                <FormField label="Subcategoria">
+                  <SimpleCombo
+                    value={f.subcategoria}
+                    setValue={(v) => setF(s => ({ ...s, subcategoria: v }))}
+                    options={f.categoria ? (CATEGORIAS_TREE[f.categoria] ?? []) : []}
+                    placeholder={f.categoria ? "Selecione a subpasta…" : "Escolha a categoria primeiro"}
+                  />
                 </FormField>
                 <div className="col-span-2">
                   <FormField label="Nome do documento *">
