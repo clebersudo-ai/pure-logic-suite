@@ -391,8 +391,49 @@ function DocumentosPage() {
         </DataCard>
       </div>
 
-      {/* Tabela com filtros */}
+      {/* Abas por categoria principal */}
       <DataCard>
+        <div className="flex flex-wrap gap-1.5 border-b p-2">
+          <button
+            type="button"
+            onClick={() => { setFCategoria("__all"); setFSubcategoria("__all"); }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${fCategoria === "__all" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Todos <span className="ml-1 opacity-70">({docs.length})</span>
+          </button>
+          {CATEGORIAS_PRINCIPAIS.map(cat => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => { setFCategoria(cat); setFSubcategoria("__all"); }}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${fCategoria === cat ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+            >
+              {cat} <span className="ml-1 opacity-70">({countsPorCategoria.get(cat) ?? 0})</span>
+            </button>
+          ))}
+        </div>
+        {fCategoria !== "__all" && subcategoriasAtivas.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 border-b bg-muted/30 p-2">
+            <button
+              type="button"
+              onClick={() => setFSubcategoria("__all")}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${fSubcategoria === "__all" ? "bg-foreground text-background" : "border bg-background hover:bg-muted"}`}
+            >
+              Todas subpastas
+            </button>
+            {subcategoriasAtivas.map(sub => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setFSubcategoria(sub)}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${fSubcategoria === sub ? "bg-foreground text-background" : "border bg-background hover:bg-muted"}`}
+              >
+                {sub} <span className="ml-1 opacity-60">({countsPorSubcategoria.get(sub) ?? 0})</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="space-y-3 border-b p-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-[240px] flex-1">
@@ -405,13 +446,13 @@ function DocumentosPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <FilterPill icon={Filter} label="Categoria" value={fCategoria} setValue={setFCategoria} options={categorias} />
             <FilterPill icon={Building2} label="Órgão" value={fOrgao} setValue={setFOrgao} options={orgaos} />
             <FilterPill label="Responsável" value={fResponsavel} setValue={setFResponsavel} options={responsaveis} />
             <FilterPill label="Status" value={fSituacao} setValue={(v) => setFSituacao(v as any)} options={statusOpcoes} />
             <FilterPill icon={CalendarClock} label="Vencimento" value={fVencimento} setValue={(v) => setFVencimento(v as any)} options={vencimentoOpcoes} />
           </div>
         </div>
+
 
         <Table>
           <TableHeader>
