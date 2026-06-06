@@ -103,6 +103,7 @@ const CRITICIDADES = [
 
 type Documento = {
   id: string; nome: string; descricao: string | null; categoria: string | null;
+  subcategoria: string | null;
   status: string; versao_atual: number; created_at: string; updated_at: string;
   orgao_emissor: string | null; numero_documento: string | null;
   empresa: string | null; unidade: string | null; responsavel: string | null;
