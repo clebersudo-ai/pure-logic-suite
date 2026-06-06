@@ -1401,6 +1401,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
           categoria: f.categoria || null,
+          subcategoria: f.subcategoria || null,
           orgao_emissor: f.orgao_emissor || null,
           numero_documento: f.numero_documento || null,
           empresa: f.empresa || null,
