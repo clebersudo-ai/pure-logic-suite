@@ -192,15 +192,18 @@ export type Database = {
           created_at: string
           criado_por: string | null
           criticidade: string
+          atualizacao_recorrente: boolean
           data_emissao: string | null
           data_validade: string | null
           descricao: string | null
           empresa: string | null
           id: string
+          intervalo_atualizacao_dias: number | null
           nome: string
           numero_documento: string | null
           observacoes: string | null
           orgao_emissor: string | null
+          proxima_atualizacao: string | null
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
@@ -219,15 +222,18 @@ export type Database = {
           created_at?: string
           criado_por?: string | null
           criticidade?: string
+          atualizacao_recorrente?: boolean
           data_emissao?: string | null
           data_validade?: string | null
           descricao?: string | null
           empresa?: string | null
           id?: string
+          intervalo_atualizacao_dias?: number | null
           nome: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
@@ -246,15 +252,18 @@ export type Database = {
           created_at?: string
           criado_por?: string | null
           criticidade?: string
+          atualizacao_recorrente?: boolean
           data_emissao?: string | null
           data_validade?: string | null
           descricao?: string | null
           empresa?: string | null
           id?: string
+          intervalo_atualizacao_dias?: number | null
           nome?: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string

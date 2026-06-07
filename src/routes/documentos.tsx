@@ -108,6 +108,7 @@ type Documento = {
   orgao_emissor: string | null; numero_documento: string | null;
   empresa: string | null; unidade: string | null; responsavel: string | null;
   data_emissao: string | null; data_validade: string | null;
+  atualizacao_recorrente: boolean; intervalo_atualizacao_dias: number | null; proxima_atualizacao: string | null;
   renovacao_obrigatoria: boolean; criticidade: string; observacoes: string | null;
   cnpj: string | null; uf: string | null; tipo_documento: string | null;
   validado_ia: boolean; validado_em: string | null;
@@ -168,6 +169,11 @@ function fileIcon(name: string) {
 function fmtDate(s: string | null) {
   if (!s) return "—";
   return new Date(s + "T00:00:00").toLocaleDateString("pt-BR");
+}
+
+function fmtIntervalo(dias: number | null) {
+  if (!dias) return "—";
+  return `${dias} dia${dias === 1 ? "" : "s"}`;
 }
 
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
@@ -526,6 +532,11 @@ function DocumentosPage() {
                         {dias < 0 ? `${Math.abs(dias)}d em atraso` : `${dias}d restantes`}
                       </div>
                     )}
+                    {doc.atualizacao_recorrente && (
+                      <div className="text-xs text-muted-foreground">
+                        Próx. atualização: {fmtDate(doc.proxima_atualizacao)}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`gap-1 ${meta.cls}`}>
@@ -655,6 +666,9 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     responsavel: documento?.responsavel ?? "",
     data_emissao: documento?.data_emissao ?? "",
     data_validade: documento?.data_validade ?? "",
+    atualizacao_recorrente: documento?.atualizacao_recorrente ?? false,
+    intervalo_atualizacao_dias: documento?.intervalo_atualizacao_dias ? String(documento.intervalo_atualizacao_dias) : "",
+    proxima_atualizacao: documento?.proxima_atualizacao ?? "",
     renovacao_obrigatoria: documento?.renovacao_obrigatoria ?? false,
     criticidade: documento?.criticidade ?? "media",
     status: documento?.status ?? "ativo",
@@ -730,6 +744,9 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       responsavel: f.responsavel || null,
       data_emissao: f.data_emissao || null,
       data_validade: f.data_validade || null,
+      atualizacao_recorrente: f.atualizacao_recorrente,
+      intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+      proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
       renovacao_obrigatoria: f.renovacao_obrigatoria,
       criticidade: f.criticidade,
       status: f.status,
@@ -860,6 +877,29 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
           <FormField label="Validade">
             <Input type="date" className={aiCls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
           </FormField>
+          <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
+            <div>
+              <Label className="text-sm font-medium">Atualização recorrente</Label>
+              <p className="text-xs text-muted-foreground">Use para mapas, exames e documentos que precisam ser atualizados periodicamente.</p>
+            </div>
+            <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+          </div>
+          {f.atualizacao_recorrente && (
+            <>
+              <FormField label="Intervalo de atualização">
+                <Input
+                  type="number"
+                  min={1}
+                  value={f.intervalo_atualizacao_dias}
+                  onChange={(e) => setF(s => ({ ...s, intervalo_atualizacao_dias: e.target.value }))}
+                  placeholder="Ex.: 30, 180, 365"
+                />
+              </FormField>
+              <FormField label="Próxima atualização">
+                <Input type="date" value={f.proxima_atualizacao} onChange={(e) => setF(s => ({ ...s, proxima_atualizacao: e.target.value }))} />
+              </FormField>
+            </>
+          )}
           <FormField label="Criticidade">
             <Select value={f.criticidade} onValueChange={(v) => setF(s => ({ ...s, criticidade: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1087,6 +1127,9 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
             <Meta label="Responsável" value={doc.responsavel} />
             <Meta label="Emissão" value={fmtDate(doc.data_emissao)} />
             <Meta label="Validade" value={fmtDate(doc.data_validade)} />
+            <Meta label="Atualização recorrente" value={doc.atualizacao_recorrente ? "Sim" : "Não"} />
+            <Meta label="Intervalo de atualização" value={fmtIntervalo(doc.intervalo_atualizacao_dias)} />
+            <Meta label="Próxima atualização" value={fmtDate(doc.proxima_atualizacao)} />
             <Meta label="Criticidade" value={CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade} />
           </div>
         </div>
@@ -1325,6 +1368,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
     tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
     categoria: "", subcategoria: "", data_emissao: "", data_validade: "", empresa: "",
     cnpj: "", uf: "", responsavel: "", observacoes: "",
+    atualizacao_recorrente: false, intervalo_atualizacao_dias: "", proxima_atualizacao: "",
     criticidade: "media", renovacao_obrigatoria: false,
   });
 
@@ -1432,6 +1476,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
           data_validade: f.data_validade || null,
+          atualizacao_recorrente: f.atualizacao_recorrente,
+          intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
@@ -1457,6 +1504,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
           data_validade: f.data_validade || null,
+          atualizacao_recorrente: f.atualizacao_recorrente,
+          intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
@@ -1695,6 +1745,29 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <FormField label="Validade">
                   <Input type="date" className={cls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
                 </FormField>
+                <div className="col-span-2 flex items-center justify-between rounded-md border p-2">
+                  <div>
+                    <Label className="text-xs">Atualização recorrente</Label>
+                    <p className="text-[11px] text-muted-foreground">Para mapas, exames e documentos periódicos.</p>
+                  </div>
+                  <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+                </div>
+                {f.atualizacao_recorrente && (
+                  <>
+                    <FormField label="Intervalo de atualização">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={f.intervalo_atualizacao_dias}
+                        onChange={(e) => setF(s => ({ ...s, intervalo_atualizacao_dias: e.target.value }))}
+                        placeholder="Ex.: 30, 180, 365"
+                      />
+                    </FormField>
+                    <FormField label="Próxima atualização">
+                      <Input type="date" value={f.proxima_atualizacao} onChange={(e) => setF(s => ({ ...s, proxima_atualizacao: e.target.value }))} />
+                    </FormField>
+                  </>
+                )}
                 <FormField label="Criticidade">
                   <Select value={f.criticidade} onValueChange={(v) => setF(s => ({ ...s, criticidade: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
