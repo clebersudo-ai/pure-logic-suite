@@ -108,6 +108,53 @@ export type Database = {
           },
         ]
       }
+      documento_demandas: {
+        Row: {
+          concluida_em: string | null
+          created_at: string
+          data_limite: string | null
+          descricao: string | null
+          documento_id: string
+          id: string
+          responsavel: string | null
+          status: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          concluida_em?: string | null
+          created_at?: string
+          data_limite?: string | null
+          descricao?: string | null
+          documento_id: string
+          id?: string
+          responsavel?: string | null
+          status?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          concluida_em?: string | null
+          created_at?: string
+          data_limite?: string | null
+          descricao?: string | null
+          documento_id?: string
+          id?: string
+          responsavel?: string | null
+          status?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documento_demandas_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documento_opcoes: {
         Row: {
           created_at: string

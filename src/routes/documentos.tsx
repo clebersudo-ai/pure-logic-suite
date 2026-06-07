@@ -22,7 +22,7 @@ import {
   FileImage, FileSpreadsheet, FileType, File as FileIcon,
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
   Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
-  ScanLine, CheckCircle2, FileSearch, Settings, ClipboardList,
+  ScanLine, CheckCircle2, FileSearch, Settings, ClipboardList, ListTodo,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
@@ -119,6 +119,12 @@ type Versao = {
   enviado_por_nome: string | null; created_at: string;
 };
 type Anexo = Omit<Versao, "versao">;
+type DocumentoDemanda = {
+  id: string; documento_id: string; titulo: string; descricao: string | null;
+  responsavel: string | null; data_limite: string | null;
+  status: "aberta" | "em_andamento" | "concluida" | "cancelada";
+  created_at: string; updated_at: string; concluida_em: string | null;
+};
 
 type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado";
 
@@ -150,6 +156,13 @@ function diasAteVencer(d: Documento): number | null {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const v = new Date(d.data_validade + "T00:00:00");
   return Math.ceil((v.getTime() - hoje.getTime()) / 86400000);
+}
+
+function diasAteData(data: string | null) {
+  if (!data) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const alvo = new Date(data + "T00:00:00");
+  return Math.ceil((alvo.getTime() - hoje.getTime()) / 86400000);
 }
 
 function formatBytes(b: number | null) {
@@ -216,6 +229,34 @@ async function insertDocumentoPayloadReturningId(payload: Record<string, any>) {
   return { data, error, recorrenciaIgnorada: false };
 }
 
+async function gerarDemandaRecorrente(documentoId: string, payload: Record<string, any>) {
+  if (!payload.atualizacao_recorrente || !payload.proxima_atualizacao || !payload.responsavel) return false;
+
+  const demanda = {
+    documento_id: documentoId,
+    titulo: `Atualizar documento: ${payload.nome}`,
+    descricao: `Demanda gerada pela atualização recorrente do documento ${payload.nome}.`,
+    responsavel: payload.responsavel,
+    data_limite: payload.proxima_atualizacao,
+    status: "aberta" as const,
+  };
+
+  const { data: existente, error: buscaError } = await supabase
+    .from("documento_demandas")
+    .select("id")
+    .eq("documento_id", documentoId)
+    .in("status", ["aberta", "em_andamento"])
+    .maybeSingle();
+
+  if (buscaError) return false;
+
+  const res = existente?.id
+    ? await supabase.from("documento_demandas").update(demanda).eq("id", existente.id)
+    : await supabase.from("documento_demandas").insert(demanda);
+
+  return !res.error;
+}
+
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
 function toOptionItem(o: DocumentoOpcao): OptionItem {
@@ -245,6 +286,7 @@ function DocumentosPage() {
   const [fResponsavel, setFResponsavel] = useState("__all");
   const [fSituacao, setFSituacao] = useState("__all");
   const [fVencimento, setFVencimento] = useState<"__all" | string>("__all");
+  const [fRecorrencia, setFRecorrencia] = useState("__all");
   const [selected, setSelected] = useState<Documento | null>(null);
   const [editing, setEditing] = useState<Documento | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -256,6 +298,11 @@ function DocumentosPage() {
   const responsaveisOpcoes = useMemo(() => optionTextItems(options, "responsavel", []), [options]);
   const statusOpcoes = useMemo(() => optionValueItems(options, "status", DEFAULT_STATUS_OPTIONS), [options]);
   const vencimentoOpcoes = useMemo(() => optionValueItems(options, "vencimento", DEFAULT_VENCIMENTO_OPTIONS), [options]);
+  const recorrenciaOpcoes = [
+    { value: "recorrentes", label: "Recorrentes" },
+    { value: "atrasadas", label: "Atualização vencida" },
+    { value: "30", label: "Próximos 30 dias" },
+  ];
 
   async function load() {
     setLoading(true);
@@ -305,9 +352,15 @@ function DocumentosPage() {
           if (!Number.isFinite(limite) || dias < 0 || dias > limite) return false;
         }
       }
+      if (fRecorrencia !== "__all") {
+        if (!doc.atualizacao_recorrente) return false;
+        const diasAtualizacao = diasAteData(doc.proxima_atualizacao);
+        if (fRecorrencia === "atrasadas" && (diasAtualizacao == null || diasAtualizacao >= 0)) return false;
+        if (fRecorrencia === "30" && (diasAtualizacao == null || diasAtualizacao < 0 || diasAtualizacao > 30)) return false;
+      }
       return true;
     });
-  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento]);
+  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia]);
 
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
@@ -341,10 +394,10 @@ function DocumentosPage() {
 
   function limparFiltros() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
-    setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all");
+    setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all"); setFRecorrencia("__all");
   }
 
-  const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento].some(v => v !== "__all");
+  const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia].some(v => v !== "__all");
 
   // contagem por categoria principal (para badges nas abas)
   const countsPorCategoria = useMemo(() => {
@@ -514,6 +567,7 @@ function DocumentosPage() {
             <FilterPill label="Responsável" value={fResponsavel} setValue={setFResponsavel} options={responsaveis} />
             <FilterPill label="Status" value={fSituacao} setValue={(v) => setFSituacao(v as any)} options={statusOpcoes} />
             <FilterPill icon={CalendarClock} label="Vencimento" value={fVencimento} setValue={(v) => setFVencimento(v as any)} options={vencimentoOpcoes} />
+            <FilterPill icon={ListTodo} label="Recorrência" value={fRecorrencia} setValue={setFRecorrencia} options={recorrenciaOpcoes} />
           </div>
         </div>
 
@@ -550,6 +604,11 @@ function DocumentosPage() {
                         <div className="text-xs text-muted-foreground">
                           {doc.numero_documento ? `Nº ${doc.numero_documento}` : "Sem número"} · v{doc.versao_atual}
                         </div>
+                        {doc.atualizacao_recorrente && (
+                          <Badge variant="outline" className="mt-1 gap-1 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-50">
+                            <ListTodo className="h-3 w-3" /> Recorrente
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </TableCell>
@@ -795,6 +854,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     };
     let error;
     let recorrenciaIgnorada = false;
+    let documentoId = documento?.id ?? "";
     if (isEdit && documento) {
       const res = await updateDocumentoPayload(documento.id, payload);
       error = res.error;
@@ -802,13 +862,16 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     } else {
       payload.criado_por = userId;
       payload.versao_atual = 0;
-      const res = await insertDocumentoPayload(payload);
+      const res = await insertDocumentoPayloadReturningId(payload);
       error = res.error;
       recorrenciaIgnorada = res.recorrenciaIgnorada;
+      documentoId = (res.data as any)?.id ?? "";
     }
     setSaving(false);
     if (error) { toast.error(error.message); return; }
+    const demandaGerada = !recorrenciaIgnorada && documentoId ? await gerarDemandaRecorrente(documentoId, payload) : false;
     toast.success(isEdit ? "Documento atualizado" : "Documento criado");
+    if (demandaGerada) toast.success("Demanda de recorrência gerada para o responsável.");
     if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
     await onSaved();
   }
@@ -1013,6 +1076,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
   const [doc, setDoc] = useState(documento);
   const [versoes, setVersoes] = useState<Versao[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [demandas, setDemandas] = useState<DocumentoDemanda[]>([]);
   const [busy, setBusy] = useState(false);
   const versionInputRef = useRef<HTMLInputElement>(null);
   const anexoInputRef = useRef<HTMLInputElement>(null);
@@ -1023,13 +1087,15 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
   useEffect(() => { setDoc(documento); }, [documento]);
 
   async function loadAll() {
-    const [v, a, d] = await Promise.all([
+    const [v, a, d, demandasRes] = await Promise.all([
       supabase.from("documento_versoes").select("*").eq("documento_id", doc.id).order("versao", { ascending: false }),
       supabase.from("documento_anexos").select("*").eq("documento_id", doc.id).order("created_at", { ascending: false }),
       supabase.from("documentos").select("*").eq("id", doc.id).single(),
+      supabase.from("documento_demandas").select("*").eq("documento_id", doc.id).order("data_limite", { ascending: true, nullsFirst: false }),
     ]);
     setVersoes((v.data as Versao[]) ?? []);
     setAnexos((a.data as Anexo[]) ?? []);
+    setDemandas((demandasRes.data as DocumentoDemanda[]) ?? []);
     if (d.data) setDoc(d.data as any as Documento);
   }
   useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, [doc.id]);
@@ -1139,6 +1205,29 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
     await onChanged();
   }
 
+  async function gerarDemandaAtual() {
+    if (!doc.atualizacao_recorrente) { toast.warning("Este documento não está marcado como recorrente."); return; }
+    if (!doc.responsavel) { toast.error("Informe um responsável antes de gerar a demanda."); return; }
+    if (!doc.proxima_atualizacao) { toast.error("Informe a próxima atualização antes de gerar a demanda."); return; }
+    const ok = await gerarDemandaRecorrente(doc.id, {
+      nome: doc.nome,
+      responsavel: doc.responsavel,
+      atualizacao_recorrente: doc.atualizacao_recorrente,
+      proxima_atualizacao: doc.proxima_atualizacao,
+    });
+    if (!ok) { toast.error("Não foi possível gerar a demanda. Verifique se o banco foi atualizado."); return; }
+    toast.success("Demanda gerada para o responsável.");
+    await loadAll();
+  }
+
+  async function atualizarStatusDemanda(id: string, status: DocumentoDemanda["status"]) {
+    const payload: any = { status, concluida_em: status === "concluida" ? new Date().toISOString() : null };
+    const { error } = await supabase.from("documento_demandas").update(payload).eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(status === "concluida" ? "Demanda concluída" : "Demanda atualizada");
+    await loadAll();
+  }
+
   function onDrop(e: React.DragEvent, kind: "versao" | "anexo") {
     e.preventDefault(); setDragOver(false);
     if (!canEdit) return;
@@ -1196,6 +1285,11 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => toast.info("Instruções para renovação serão adicionadas na próxima etapa.")}>
                   <ClipboardList className="h-4 w-4" /> Instruções
                 </Button>
+                {doc.atualizacao_recorrente && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={gerarDemandaAtual}>
+                    <ListTodo className="h-4 w-4" /> Gerar demanda
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => versionInputRef.current?.click()}>
                   <Upload className="h-4 w-4" /> Nova versão
                 </Button>
@@ -1240,6 +1334,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
             <TabsList>
               <TabsTrigger value="versoes"><History className="h-3.5 w-3.5" /> Histórico de versões ({versoes.length})</TabsTrigger>
               <TabsTrigger value="anexos"><Paperclip className="h-3.5 w-3.5" /> Anexos ({anexos.length})</TabsTrigger>
+              <TabsTrigger value="demandas"><ListTodo className="h-3.5 w-3.5" /> Demandas ({demandas.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="versoes">
               <FileList
@@ -1260,6 +1355,13 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
                 onDownload={(p) => openFile(p, true)}
                 onRemove={canEdit ? (item) => removerAnexo(item as Anexo) : undefined}
                 emptyLabel="Nenhum anexo. Arraste arquivos ou clique em Adicionar anexos."
+              />
+            </TabsContent>
+            <TabsContent value="demandas">
+              <DemandasList
+                demandas={demandas}
+                onConcluir={(id) => atualizarStatusDemanda(id, "concluida")}
+                onReabrir={(id) => atualizarStatusDemanda(id, "aberta")}
               />
             </TabsContent>
           </Tabs>
@@ -1592,6 +1694,13 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       toast.success(replaceMode
         ? `Documento atualizado para v${novaVersao} · Validado`
         : "Documento validado e anexado automaticamente");
+      const demandaGerada = !recorrenciaIgnorada ? await gerarDemandaRecorrente(docId, {
+        nome: f.nome,
+        responsavel: f.responsavel || null,
+        atualizacao_recorrente: f.atualizacao_recorrente,
+        proxima_atualizacao: f.proxima_atualizacao || null,
+      }) : false;
+      if (demandaGerada) toast.success("Demanda de recorrência gerada para o responsável.");
       if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
       await onSaved();
     } catch (e: any) {
@@ -1855,6 +1964,54 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function DemandasList({ demandas, onConcluir, onReabrir }: {
+  demandas: DocumentoDemanda[];
+  onConcluir: (id: string) => void;
+  onReabrir: (id: string) => void;
+}) {
+  if (demandas.length === 0) return <EmptyState label="Nenhuma demanda gerada para este documento" />;
+
+  const statusLabel: Record<DocumentoDemanda["status"], string> = {
+    aberta: "Aberta",
+    em_andamento: "Em andamento",
+    concluida: "Concluída",
+    cancelada: "Cancelada",
+  };
+
+  return (
+    <div className="space-y-2">
+      {demandas.map(d => {
+        const dias = diasAteData(d.data_limite);
+        const atrasada = d.status !== "concluida" && dias != null && dias < 0;
+        return (
+          <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-medium">{d.titulo}</div>
+                <Badge variant="outline" className={d.status === "concluida" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : atrasada ? "border-red-200 bg-red-50 text-red-700" : ""}>
+                  {statusLabel[d.status]}
+                </Badge>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Responsável: {d.responsavel ?? "—"} · Prazo: {fmtDate(d.data_limite)}
+                {dias != null && d.status !== "concluida" ? ` · ${dias < 0 ? `${Math.abs(dias)}d em atraso` : `${dias}d restantes`}` : ""}
+              </div>
+              {d.descricao && <div className="mt-1 text-xs text-muted-foreground">{d.descricao}</div>}
+            </div>
+            {d.status === "concluida" ? (
+              <Button size="sm" variant="outline" onClick={() => onReabrir(d.id)}>Reabrir</Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => onConcluir(d.id)}>
+                <CheckCircle2 className="h-4 w-4" /> Concluir
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
