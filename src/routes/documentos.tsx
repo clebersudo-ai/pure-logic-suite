@@ -176,6 +176,46 @@ function fmtIntervalo(dias: number | null) {
   return `${dias} dia${dias === 1 ? "" : "s"}`;
 }
 
+const RECORRENCIA_COLUMNS = ["atualizacao_recorrente", "intervalo_atualizacao_dias", "proxima_atualizacao"];
+
+function stripRecorrenciaPayload(payload: Record<string, any>) {
+  const next = { ...payload };
+  for (const column of RECORRENCIA_COLUMNS) delete next[column];
+  return next;
+}
+
+function isRecorrenciaSchemaError(error: any) {
+  const msg = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`;
+  return RECORRENCIA_COLUMNS.some(column => msg.includes(column));
+}
+
+async function updateDocumentoPayload(id: string, payload: Record<string, any>) {
+  let { error } = await supabase.from("documentos").update(payload).eq("id", id);
+  if (error && isRecorrenciaSchemaError(error)) {
+    ({ error } = await supabase.from("documentos").update(stripRecorrenciaPayload(payload)).eq("id", id));
+    return { error, recorrenciaIgnorada: !error };
+  }
+  return { error, recorrenciaIgnorada: false };
+}
+
+async function insertDocumentoPayload(payload: Record<string, any>) {
+  let { error } = await supabase.from("documentos").insert(payload);
+  if (error && isRecorrenciaSchemaError(error)) {
+    ({ error } = await supabase.from("documentos").insert(stripRecorrenciaPayload(payload)));
+    return { error, recorrenciaIgnorada: !error };
+  }
+  return { error, recorrenciaIgnorada: false };
+}
+
+async function insertDocumentoPayloadReturningId(payload: Record<string, any>) {
+  let { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
+  if (error && isRecorrenciaSchemaError(error)) {
+    ({ data, error } = await supabase.from("documentos").insert(stripRecorrenciaPayload(payload)).select("id").single());
+    return { data, error, recorrenciaIgnorada: !error };
+  }
+  return { data, error, recorrenciaIgnorada: false };
+}
+
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
 function toOptionItem(o: DocumentoOpcao): OptionItem {
@@ -754,16 +794,22 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       descricao: f.descricao || null,
     };
     let error;
+    let recorrenciaIgnorada = false;
     if (isEdit && documento) {
-      ({ error } = await supabase.from("documentos").update(payload).eq("id", documento.id));
+      const res = await updateDocumentoPayload(documento.id, payload);
+      error = res.error;
+      recorrenciaIgnorada = res.recorrenciaIgnorada;
     } else {
       payload.criado_por = userId;
       payload.versao_atual = 0;
-      ({ error } = await supabase.from("documentos").insert(payload));
+      const res = await insertDocumentoPayload(payload);
+      error = res.error;
+      recorrenciaIgnorada = res.recorrenciaIgnorada;
     }
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(isEdit ? "Documento atualizado" : "Documento criado");
+    if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
     await onSaved();
   }
 
@@ -1459,6 +1505,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
 
       let docId: string;
       let novaVersao: number;
+      let recorrenciaIgnorada = false;
 
       if (replaceMode && duplicate) {
         docId = duplicate.id;
@@ -1487,7 +1534,8 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           versao_atual: novaVersao,
           status: "ativo",
         };
-        const { error } = await supabase.from("documentos").update(payload).eq("id", docId);
+        const { error, recorrenciaIgnorada: ignorada } = await updateDocumentoPayload(docId, payload);
+        recorrenciaIgnorada = ignorada;
         if (error) throw error;
       } else {
         novaVersao = 1;
@@ -1516,7 +1564,8 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           versao_atual: novaVersao,
           criado_por: userId,
         };
-        const { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
+        const { data, error, recorrenciaIgnorada: ignorada } = await insertDocumentoPayloadReturningId(payload);
+        recorrenciaIgnorada = ignorada;
         if (error) throw error;
         docId = (data as any).id;
       }
@@ -1543,6 +1592,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       toast.success(replaceMode
         ? `Documento atualizado para v${novaVersao} · Validado`
         : "Documento validado e anexado automaticamente");
+      if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
       await onSaved();
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao salvar documento");
