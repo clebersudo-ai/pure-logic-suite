@@ -108,53 +108,6 @@ export type Database = {
           },
         ]
       }
-      documento_demandas: {
-        Row: {
-          concluida_em: string | null
-          created_at: string
-          data_limite: string | null
-          descricao: string | null
-          documento_id: string
-          id: string
-          responsavel: string | null
-          status: string
-          titulo: string
-          updated_at: string
-        }
-        Insert: {
-          concluida_em?: string | null
-          created_at?: string
-          data_limite?: string | null
-          descricao?: string | null
-          documento_id: string
-          id?: string
-          responsavel?: string | null
-          status?: string
-          titulo: string
-          updated_at?: string
-        }
-        Update: {
-          concluida_em?: string | null
-          created_at?: string
-          data_limite?: string | null
-          descricao?: string | null
-          documento_id?: string
-          id?: string
-          responsavel?: string | null
-          status?: string
-          titulo?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "documento_demandas_documento_id_fkey"
-            columns: ["documento_id"]
-            isOneToOne: false
-            referencedRelation: "documentos"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       documento_opcoes: {
         Row: {
           created_at: string
@@ -239,18 +192,15 @@ export type Database = {
           created_at: string
           criado_por: string | null
           criticidade: string
-          atualizacao_recorrente: boolean
           data_emissao: string | null
           data_validade: string | null
           descricao: string | null
           empresa: string | null
           id: string
-          intervalo_atualizacao_dias: number | null
           nome: string
           numero_documento: string | null
           observacoes: string | null
           orgao_emissor: string | null
-          proxima_atualizacao: string | null
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
@@ -269,18 +219,15 @@ export type Database = {
           created_at?: string
           criado_por?: string | null
           criticidade?: string
-          atualizacao_recorrente?: boolean
           data_emissao?: string | null
           data_validade?: string | null
           descricao?: string | null
           empresa?: string | null
           id?: string
-          intervalo_atualizacao_dias?: number | null
           nome: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
-          proxima_atualizacao?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
@@ -299,18 +246,15 @@ export type Database = {
           created_at?: string
           criado_por?: string | null
           criticidade?: string
-          atualizacao_recorrente?: boolean
           data_emissao?: string | null
           data_validade?: string | null
           descricao?: string | null
           empresa?: string | null
           id?: string
-          intervalo_atualizacao_dias?: number | null
           nome?: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
-          proxima_atualizacao?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
