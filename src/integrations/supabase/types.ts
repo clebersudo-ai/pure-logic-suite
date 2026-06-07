@@ -201,6 +201,10 @@ export type Database = {
           numero_documento: string | null
           observacoes: string | null
           orgao_emissor: string | null
+          proxima_atualizacao: string | null
+          recorrencia_dia_base: number | null
+          recorrencia_mensal_modo: string | null
+          recorrencia_tipo: string | null
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
@@ -228,6 +232,10 @@ export type Database = {
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
+          recorrencia_dia_base?: number | null
+          recorrencia_mensal_modo?: string | null
+          recorrencia_tipo?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
@@ -255,6 +263,10 @@ export type Database = {
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
+          recorrencia_dia_base?: number | null
+          recorrencia_mensal_modo?: string | null
+          recorrencia_tipo?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string

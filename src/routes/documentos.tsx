@@ -109,6 +109,7 @@ type Documento = {
   empresa: string | null; unidade: string | null; responsavel: string | null;
   data_emissao: string | null; data_validade: string | null;
   atualizacao_recorrente: boolean; intervalo_atualizacao_dias: number | null; proxima_atualizacao: string | null;
+  recorrencia_tipo: string | null; recorrencia_dia_base: number | null; recorrencia_mensal_modo: string | null;
   renovacao_obrigatoria: boolean; criticidade: string; observacoes: string | null;
   cnpj: string | null; uf: string | null; tipo_documento: string | null;
   validado_ia: boolean; validado_em: string | null;
@@ -189,71 +190,161 @@ function fmtIntervalo(dias: number | null) {
   return `${dias} dia${dias === 1 ? "" : "s"}`;
 }
 
-const RECORRENCIA_COLUMNS = ["atualizacao_recorrente", "intervalo_atualizacao_dias", "proxima_atualizacao"];
-
-function stripRecorrenciaPayload(payload: Record<string, any>) {
-  const next = { ...payload };
-  for (const column of RECORRENCIA_COLUMNS) delete next[column];
-  return next;
-}
-
-function isRecorrenciaSchemaError(error: any) {
-  const msg = `${error?.message ?? ""} ${error?.details ?? ""} ${error?.hint ?? ""}`;
-  return RECORRENCIA_COLUMNS.some(column => msg.includes(column));
-}
+type RecorrenciaTipo = "diaria" | "quinzenal" | "mensal";
+type RecorrenciaMensalModo = "dia_fixo" | "data_cadastro";
 
 async function updateDocumentoPayload(id: string, payload: Record<string, any>) {
-  let { error } = await supabase.from("documentos").update(payload).eq("id", id);
-  if (error && isRecorrenciaSchemaError(error)) {
-    ({ error } = await supabase.from("documentos").update(stripRecorrenciaPayload(payload)).eq("id", id));
-    return { error, recorrenciaIgnorada: !error };
-  }
-  return { error, recorrenciaIgnorada: false };
+  const { error } = await supabase.from("documentos").update(payload).eq("id", id);
+  return { error };
 }
 
 async function insertDocumentoPayload(payload: Record<string, any>) {
-  let { error } = await supabase.from("documentos").insert(payload);
-  if (error && isRecorrenciaSchemaError(error)) {
-    ({ error } = await supabase.from("documentos").insert(stripRecorrenciaPayload(payload)));
-    return { error, recorrenciaIgnorada: !error };
-  }
-  return { error, recorrenciaIgnorada: false };
+  const { error } = await supabase.from("documentos").insert(payload);
+  return { error };
 }
 
 async function insertDocumentoPayloadReturningId(payload: Record<string, any>) {
-  let { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
-  if (error && isRecorrenciaSchemaError(error)) {
-    ({ data, error } = await supabase.from("documentos").insert(stripRecorrenciaPayload(payload)).select("id").single());
-    return { data, error, recorrenciaIgnorada: !error };
-  }
-  return { data, error, recorrenciaIgnorada: false };
+  const { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
+  return { data, error };
 }
 
-async function gerarDemandaRecorrente(documentoId: string, payload: Record<string, any>) {
-  if (!payload.atualizacao_recorrente || !payload.proxima_atualizacao || !payload.responsavel) return false;
+function isoDate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
 
-  const demanda = {
+function parseLocalDate(s?: string | null) {
+  if (!s) return null;
+  const d = new Date(`${s}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function addDays(base: Date, days: number) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function lastDayOfMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function fixedMonthDate(year: number, month: number, day: number) {
+  return new Date(year, month, Math.min(day, lastDayOfMonth(year, month)));
+}
+
+function nextFixedMonthDay(after: Date, day: number) {
+  let candidate = fixedMonthDate(after.getFullYear(), after.getMonth(), day);
+  if (candidate <= after) candidate = fixedMonthDate(after.getFullYear(), after.getMonth() + 1, day);
+  return candidate;
+}
+
+function nextQuinzenalDay(after: Date, baseDay: number) {
+  const days = [baseDay, baseDay + 15].sort((a, b) => a - b);
+  for (const day of days) {
+    const candidate = fixedMonthDate(after.getFullYear(), after.getMonth(), day);
+    if (candidate > after) return candidate;
+  }
+  return fixedMonthDate(after.getFullYear(), after.getMonth() + 1, days[0]);
+}
+
+function nextThirtyDayCycle(after: Date, createdAt?: string | null) {
+  let candidate = parseLocalDate(createdAt) ?? new Date();
+  candidate.setHours(0, 0, 0, 0);
+  while (candidate <= after) candidate = addDays(candidate, 30);
+  return candidate;
+}
+
+function nextRecurrenceDateAfter(after: Date, config: {
+  tipo?: string | null;
+  diaBase?: number | null;
+  mensalModo?: string | null;
+  createdAt?: string | null;
+}) {
+  const tipo = (config.tipo || "mensal") as RecorrenciaTipo;
+  if (tipo === "diaria") return addDays(after, 1);
+  if (tipo === "quinzenal") return nextQuinzenalDay(after, config.diaBase || 15);
+  if (config.mensalModo === "data_cadastro") return nextThirtyDayCycle(after, config.createdAt);
+  return nextFixedMonthDay(after, config.diaBase || 1);
+}
+
+function recurrenceDates(config: {
+  tipo?: string | null;
+  diaBase?: number | null;
+  mensalModo?: string | null;
+  createdAt?: string | null;
+}, count = 2, fromDate = new Date()) {
+  const dates: string[] = [];
+  let cursor = new Date(fromDate);
+  cursor.setHours(0, 0, 0, 0);
+  for (let i = 0; i < count; i++) {
+    const next = nextRecurrenceDateAfter(cursor, config);
+    dates.push(isoDate(next));
+    cursor = next;
+  }
+  return dates;
+}
+
+function calcularProximaAtualizacao(f: {
+  atualizacao_recorrente: boolean;
+  recorrencia_tipo?: string | null;
+  recorrencia_dia_base?: string | number | null;
+  recorrencia_mensal_modo?: string | null;
+}, createdAt?: string | null) {
+  if (!f.atualizacao_recorrente) return "";
+  const [next] = recurrenceDates({
+    tipo: f.recorrencia_tipo,
+    diaBase: Number(f.recorrencia_dia_base) || null,
+    mensalModo: f.recorrencia_mensal_modo,
+    createdAt,
+  }, 1);
+  return next ?? "";
+}
+
+function recorrenciaLabel(d: Pick<Documento, "recorrencia_tipo" | "recorrencia_dia_base" | "recorrencia_mensal_modo">) {
+  if (d.recorrencia_tipo === "diaria") return "Diariamente";
+  if (d.recorrencia_tipo === "quinzenal") {
+    const dia = d.recorrencia_dia_base || 15;
+    return `Quinzenalmente - dias ${dia} e ${dia + 15}`;
+  }
+  if (d.recorrencia_tipo === "mensal" && d.recorrencia_mensal_modo === "data_cadastro") return "Mensalmente - 30 dias após o cadastro";
+  if (d.recorrencia_tipo === "mensal") return `Mensalmente - dia ${d.recorrencia_dia_base || 1}`;
+  return "—";
+}
+
+async function gerarDemandasRecorrentes(documentoId: string, payload: Record<string, any>, createdAt?: string | null) {
+  if (!payload.atualizacao_recorrente || !payload.responsavel) return false;
+
+  const { data: abertas, error: abertasError } = await supabase
+    .from("documento_demandas")
+    .select("id, data_limite")
+    .eq("documento_id", documentoId)
+    .in("status", ["aberta", "em_andamento"])
+    .order("data_limite", { ascending: true, nullsFirst: false });
+
+  if (abertasError) return false;
+  const abertasAtuais = abertas ?? [];
+  if (abertasAtuais.length >= 2) return false;
+
+  const existentes = new Set(abertasAtuais.map((d: any) => d.data_limite).filter(Boolean));
+  const datas = recurrenceDates({
+    tipo: payload.recorrencia_tipo,
+    diaBase: payload.recorrencia_dia_base,
+    mensalModo: payload.recorrencia_mensal_modo,
+    createdAt,
+  }, 4).filter(data => !existentes.has(data)).slice(0, 2 - abertasAtuais.length);
+
+  if (datas.length === 0) return false;
+
+  const demandas = datas.map(data => ({
     documento_id: documentoId,
     titulo: `Atualizar documento: ${payload.nome}`,
     descricao: `Demanda gerada pela atualização recorrente do documento ${payload.nome}.`,
     responsavel: payload.responsavel,
-    data_limite: payload.proxima_atualizacao,
+    data_limite: data,
     status: "aberta" as const,
-  };
+  }));
 
-  const { data: existente, error: buscaError } = await supabase
-    .from("documento_demandas")
-    .select("id")
-    .eq("documento_id", documentoId)
-    .in("status", ["aberta", "em_andamento"])
-    .maybeSingle();
-
-  if (buscaError) return false;
-
-  const res = existente?.id
-    ? await supabase.from("documento_demandas").update(demanda).eq("id", existente.id)
-    : await supabase.from("documento_demandas").insert(demanda);
-
+  const res = await supabase.from("documento_demandas").insert(demandas);
   return !res.error;
 }
 
@@ -766,7 +857,9 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     data_emissao: documento?.data_emissao ?? "",
     data_validade: documento?.data_validade ?? "",
     atualizacao_recorrente: documento?.atualizacao_recorrente ?? false,
-    intervalo_atualizacao_dias: documento?.intervalo_atualizacao_dias ? String(documento.intervalo_atualizacao_dias) : "",
+    recorrencia_tipo: documento?.recorrencia_tipo ?? "mensal",
+    recorrencia_dia_base: documento?.recorrencia_dia_base ? String(documento.recorrencia_dia_base) : "1",
+    recorrencia_mensal_modo: documento?.recorrencia_mensal_modo ?? "dia_fixo",
     proxima_atualizacao: documento?.proxima_atualizacao ?? "",
     renovacao_obrigatoria: documento?.renovacao_obrigatoria ?? false,
     criticidade: documento?.criticidade ?? "media",
@@ -774,6 +867,10 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     observacoes: documento?.observacoes ?? "",
     descricao: documento?.descricao ?? "",
   });
+
+  useEffect(() => {
+    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s, documento?.created_at) }));
+  }, [f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo, documento?.created_at]);
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiFile, setAiFile] = useState<File | null>(null);
@@ -844,7 +941,10 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       data_emissao: f.data_emissao || null,
       data_validade: f.data_validade || null,
       atualizacao_recorrente: f.atualizacao_recorrente,
-      intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+      intervalo_atualizacao_dias: null,
+      recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+      recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+      recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
       proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
       renovacao_obrigatoria: f.renovacao_obrigatoria,
       criticidade: f.criticidade,
@@ -853,26 +953,22 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       descricao: f.descricao || null,
     };
     let error;
-    let recorrenciaIgnorada = false;
     let documentoId = documento?.id ?? "";
     if (isEdit && documento) {
       const res = await updateDocumentoPayload(documento.id, payload);
       error = res.error;
-      recorrenciaIgnorada = res.recorrenciaIgnorada;
     } else {
       payload.criado_por = userId;
       payload.versao_atual = 0;
       const res = await insertDocumentoPayloadReturningId(payload);
       error = res.error;
-      recorrenciaIgnorada = res.recorrenciaIgnorada;
       documentoId = (res.data as any)?.id ?? "";
     }
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    const demandaGerada = !recorrenciaIgnorada && documentoId ? await gerarDemandaRecorrente(documentoId, payload) : false;
+    const demandaGerada = documentoId ? await gerarDemandasRecorrentes(documentoId, payload, documento?.created_at) : false;
     toast.success(isEdit ? "Documento atualizado" : "Documento criado");
     if (demandaGerada) toast.success("Demanda de recorrência gerada para o responsável.");
-    if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
     await onSaved();
   }
 
@@ -995,17 +1091,55 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
           </div>
           {f.atualizacao_recorrente && (
             <>
-              <FormField label="Intervalo de atualização">
-                <Input
-                  type="number"
-                  min={1}
-                  value={f.intervalo_atualizacao_dias}
-                  onChange={(e) => setF(s => ({ ...s, intervalo_atualizacao_dias: e.target.value }))}
-                  placeholder="Ex.: 30, 180, 365"
-                />
+              <FormField label="Repetir em:">
+                <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="diaria">Diariamente</SelectItem>
+                    <SelectItem value="quinzenal">Quinzenalmente</SelectItem>
+                    <SelectItem value="mensal">Mensalmente</SelectItem>
+                  </SelectContent>
+                </Select>
               </FormField>
+              {f.recorrencia_tipo === "quinzenal" && (
+                <FormField label="Dia base da quinzena">
+                  <Select value={f.recorrencia_dia_base} onValueChange={(v) => setF(s => ({ ...s, recorrencia_dia_base: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 15 }, (_, i) => String(i + 1)).map(dia => (
+                        <SelectItem key={dia} value={dia}>Dia {dia} e dia {Number(dia) + 15}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              )}
+              {f.recorrencia_tipo === "mensal" && (
+                <>
+                  <FormField label="Modelo mensal">
+                    <Select value={f.recorrencia_mensal_modo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_mensal_modo: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dia_fixo">Dia fixo do mês</SelectItem>
+                        <SelectItem value="data_cadastro">30 dias após o cadastro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormField>
+                  {f.recorrencia_mensal_modo === "dia_fixo" && (
+                    <FormField label="Dia fixo">
+                      <Select value={f.recorrencia_dia_base} onValueChange={(v) => setF(s => ({ ...s, recorrencia_dia_base: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 31 }, (_, i) => String(i + 1)).map(dia => (
+                            <SelectItem key={dia} value={dia}>Dia {dia}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormField>
+                  )}
+                </>
+              )}
               <FormField label="Próxima atualização">
-                <Input type="date" value={f.proxima_atualizacao} onChange={(e) => setF(s => ({ ...s, proxima_atualizacao: e.target.value }))} />
+                <Input type="date" value={f.proxima_atualizacao} readOnly className="bg-muted/60" />
               </FormField>
             </>
           )}
@@ -1209,12 +1343,15 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
     if (!doc.atualizacao_recorrente) { toast.warning("Este documento não está marcado como recorrente."); return; }
     if (!doc.responsavel) { toast.error("Informe um responsável antes de gerar a demanda."); return; }
     if (!doc.proxima_atualizacao) { toast.error("Informe a próxima atualização antes de gerar a demanda."); return; }
-    const ok = await gerarDemandaRecorrente(doc.id, {
+    const ok = await gerarDemandasRecorrentes(doc.id, {
       nome: doc.nome,
       responsavel: doc.responsavel,
       atualizacao_recorrente: doc.atualizacao_recorrente,
+      recorrencia_tipo: doc.recorrencia_tipo,
+      recorrencia_dia_base: doc.recorrencia_dia_base,
+      recorrencia_mensal_modo: doc.recorrencia_mensal_modo,
       proxima_atualizacao: doc.proxima_atualizacao,
-    });
+    }, doc.created_at);
     if (!ok) { toast.error("Não foi possível gerar a demanda. Verifique se o banco foi atualizado."); return; }
     toast.success("Demanda gerada para o responsável.");
     await loadAll();
@@ -1224,6 +1361,16 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
     const payload: any = { status, concluida_em: status === "concluida" ? new Date().toISOString() : null };
     const { error } = await supabase.from("documento_demandas").update(payload).eq("id", id);
     if (error) { toast.error(error.message); return; }
+    if (status === "concluida") {
+      await gerarDemandasRecorrentes(doc.id, {
+        nome: doc.nome,
+        responsavel: doc.responsavel,
+        atualizacao_recorrente: doc.atualizacao_recorrente,
+        recorrencia_tipo: doc.recorrencia_tipo,
+        recorrencia_dia_base: doc.recorrencia_dia_base,
+        recorrencia_mensal_modo: doc.recorrencia_mensal_modo,
+      }, doc.created_at);
+    }
     toast.success(status === "concluida" ? "Demanda concluída" : "Demanda atualizada");
     await loadAll();
   }
@@ -1263,7 +1410,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
             <Meta label="Emissão" value={fmtDate(doc.data_emissao)} />
             <Meta label="Validade" value={fmtDate(doc.data_validade)} />
             <Meta label="Atualização recorrente" value={doc.atualizacao_recorrente ? "Sim" : "Não"} />
-            <Meta label="Intervalo de atualização" value={fmtIntervalo(doc.intervalo_atualizacao_dias)} />
+            <Meta label="Repetir em" value={doc.atualizacao_recorrente ? recorrenciaLabel(doc) : "—"} />
             <Meta label="Próxima atualização" value={fmtDate(doc.proxima_atualizacao)} />
             <Meta label="Criticidade" value={CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade} />
           </div>
@@ -1516,9 +1663,13 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
     tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
     categoria: "", subcategoria: "", data_emissao: "", data_validade: "", empresa: "",
     cnpj: "", uf: "", responsavel: "", observacoes: "",
-    atualizacao_recorrente: false, intervalo_atualizacao_dias: "", proxima_atualizacao: "",
+    atualizacao_recorrente: false, recorrencia_tipo: "mensal", recorrencia_dia_base: "1", recorrencia_mensal_modo: "dia_fixo", proxima_atualizacao: "",
     criticidade: "media", renovacao_obrigatoria: false,
   });
+
+  useEffect(() => {
+    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s) }));
+  }, [f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo]);
 
   function pickFile(file: File) {
     if (preview) URL.revokeObjectURL(preview.url);
@@ -1607,7 +1758,6 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
 
       let docId: string;
       let novaVersao: number;
-      let recorrenciaIgnorada = false;
 
       if (replaceMode && duplicate) {
         docId = duplicate.id;
@@ -1626,7 +1776,10 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           data_emissao: f.data_emissao || null,
           data_validade: f.data_validade || null,
           atualizacao_recorrente: f.atualizacao_recorrente,
-          intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+          intervalo_atualizacao_dias: null,
+          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
           proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.renovacao_obrigatoria,
           criticidade: f.criticidade,
@@ -1636,8 +1789,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           versao_atual: novaVersao,
           status: "ativo",
         };
-        const { error, recorrenciaIgnorada: ignorada } = await updateDocumentoPayload(docId, payload);
-        recorrenciaIgnorada = ignorada;
+        const { error } = await updateDocumentoPayload(docId, payload);
         if (error) throw error;
       } else {
         novaVersao = 1;
@@ -1655,7 +1807,10 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           data_emissao: f.data_emissao || null,
           data_validade: f.data_validade || null,
           atualizacao_recorrente: f.atualizacao_recorrente,
-          intervalo_atualizacao_dias: f.atualizacao_recorrente && f.intervalo_atualizacao_dias ? Number(f.intervalo_atualizacao_dias) : null,
+          intervalo_atualizacao_dias: null,
+          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
           proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.renovacao_obrigatoria,
           criticidade: f.criticidade,
@@ -1666,8 +1821,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           versao_atual: novaVersao,
           criado_por: userId,
         };
-        const { data, error, recorrenciaIgnorada: ignorada } = await insertDocumentoPayloadReturningId(payload);
-        recorrenciaIgnorada = ignorada;
+        const { data, error } = await insertDocumentoPayloadReturningId(payload);
         if (error) throw error;
         docId = (data as any).id;
       }
@@ -1694,14 +1848,16 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       toast.success(replaceMode
         ? `Documento atualizado para v${novaVersao} · Validado`
         : "Documento validado e anexado automaticamente");
-      const demandaGerada = !recorrenciaIgnorada ? await gerarDemandaRecorrente(docId, {
+      const demandaGerada = await gerarDemandasRecorrentes(docId, {
         nome: f.nome,
         responsavel: f.responsavel || null,
         atualizacao_recorrente: f.atualizacao_recorrente,
+        recorrencia_tipo: f.recorrencia_tipo,
+        recorrencia_dia_base: Number(f.recorrencia_dia_base) || null,
+        recorrencia_mensal_modo: f.recorrencia_mensal_modo,
         proxima_atualizacao: f.proxima_atualizacao || null,
-      }) : false;
+      });
       if (demandaGerada) toast.success("Demanda de recorrência gerada para o responsável.");
-      if (recorrenciaIgnorada) toast.warning("Documento salvo. A recorrência será gravada após a atualização do banco.");
       await onSaved();
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao salvar documento");
@@ -1913,17 +2069,55 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 </div>
                 {f.atualizacao_recorrente && (
                   <>
-                    <FormField label="Intervalo de atualização">
-                      <Input
-                        type="number"
-                        min={1}
-                        value={f.intervalo_atualizacao_dias}
-                        onChange={(e) => setF(s => ({ ...s, intervalo_atualizacao_dias: e.target.value }))}
-                        placeholder="Ex.: 30, 180, 365"
-                      />
+                    <FormField label="Repetir em:">
+                      <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="diaria">Diariamente</SelectItem>
+                          <SelectItem value="quinzenal">Quinzenalmente</SelectItem>
+                          <SelectItem value="mensal">Mensalmente</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </FormField>
+                    {f.recorrencia_tipo === "quinzenal" && (
+                      <FormField label="Dia base da quinzena">
+                        <Select value={f.recorrencia_dia_base} onValueChange={(v) => setF(s => ({ ...s, recorrencia_dia_base: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 15 }, (_, i) => String(i + 1)).map(dia => (
+                              <SelectItem key={dia} value={dia}>Dia {dia} e dia {Number(dia) + 15}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    )}
+                    {f.recorrencia_tipo === "mensal" && (
+                      <>
+                        <FormField label="Modelo mensal">
+                          <Select value={f.recorrencia_mensal_modo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_mensal_modo: v }))}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="dia_fixo">Dia fixo do mês</SelectItem>
+                              <SelectItem value="data_cadastro">30 dias após o cadastro</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormField>
+                        {f.recorrencia_mensal_modo === "dia_fixo" && (
+                          <FormField label="Dia fixo">
+                            <Select value={f.recorrencia_dia_base} onValueChange={(v) => setF(s => ({ ...s, recorrencia_dia_base: v }))}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {Array.from({ length: 31 }, (_, i) => String(i + 1)).map(dia => (
+                                  <SelectItem key={dia} value={dia}>Dia {dia}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormField>
+                        )}
+                      </>
+                    )}
                     <FormField label="Próxima atualização">
-                      <Input type="date" value={f.proxima_atualizacao} onChange={(e) => setF(s => ({ ...s, proxima_atualizacao: e.target.value }))} />
+                      <Input type="date" value={f.proxima_atualizacao} readOnly className="bg-muted/60" />
                     </FormField>
                   </>
                 )}
