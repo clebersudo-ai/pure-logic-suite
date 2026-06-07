@@ -1158,7 +1158,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
                 currentVersion={doc.versao_atual}
                 onPreview={previewFile}
                 onDownload={(p) => openFile(p, true)}
-                onRemove={canEdit ? removerVersao : undefined}
+                onRemove={canEdit ? (item) => removerVersao(item as Versao) : undefined}
                 emptyLabel="Nenhuma versão registrada. Clique em Nova versão para iniciar."
                 showVersion
               />
@@ -1169,7 +1169,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
                 currentVersion={null}
                 onPreview={previewFile}
                 onDownload={(p) => openFile(p, true)}
-                onRemove={canEdit ? removerAnexo : undefined}
+                onRemove={canEdit ? (item) => removerAnexo(item as Anexo) : undefined}
                 emptyLabel="Nenhum anexo. Arraste arquivos ou clique em Adicionar anexos."
               />
             </TabsContent>
