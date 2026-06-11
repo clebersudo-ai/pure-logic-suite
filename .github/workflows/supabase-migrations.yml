@@ -29,45 +29,26 @@ jobs:
 
       - name: Validate Supabase secrets
         run: |
-          if [ -z "$SUPABASE_DB_URL" ]; then
-            echo "::error::SUPABASE_DB_URL não foi encontrado nos Repository secrets."
-            exit 1
-          fi
-
-          if ! [[ "$SUPABASE_DB_URL" =~ ^postgres(ql)?:// ]]; then
-            echo "::error::SUPABASE_DB_URL deve ser a connection string Postgres do Supabase."
-            exit 1
-          fi
+          for secret_name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_ID SUPABASE_DB_PASSWORD; do
+            if [ -z "${!secret_name}" ]; then
+              echo "::error::$secret_name nao foi encontrado nos Repository secrets."
+              exit 1
+            fi
+          done
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-      - name: Normalize database connection
-        shell: bash
-        run: |
-          python - <<'PY'
-          import os
-          from urllib.parse import quote, unquote
-
-          raw = os.environ["SUPABASE_DB_URL"]
-          scheme, remainder = raw.split("://", 1)
-          userinfo, host = remainder.rsplit("@", 1)
-          username, password = userinfo.split(":", 1)
-
-          if host.startswith("db.dsdnlcnwrpapmwkiaejx.supabase.co"):
-              username = "postgres.dsdnlcnwrpapmwkiaejx"
-              host = "aws-0-us-west-2.pooler.supabase.com:5432/postgres"
-
-          normalized = (
-              f"{scheme}://{quote(unquote(username), safe='')}:"
-              f"{quote(unquote(password), safe='')}@{host}"
-          )
-
-          print(f"::add-mask::{normalized}")
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
-              env_file.write(f"SUPABASE_DB_URL_NORMALIZED={normalized}\n")
-          PY
+      - name: Link Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push database migrations
-        run: supabase db push --db-url "$SUPABASE_DB_URL_NORMALIZED"
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
