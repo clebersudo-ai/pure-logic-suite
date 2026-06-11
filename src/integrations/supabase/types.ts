@@ -108,6 +108,53 @@ export type Database = {
           },
         ]
       }
+      documento_demandas: {
+        Row: {
+          concluida_em: string | null
+          created_at: string
+          data_limite: string | null
+          descricao: string | null
+          documento_id: string
+          id: string
+          responsavel: string | null
+          status: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          concluida_em?: string | null
+          created_at?: string
+          data_limite?: string | null
+          descricao?: string | null
+          documento_id: string
+          id?: string
+          responsavel?: string | null
+          status?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          concluida_em?: string | null
+          created_at?: string
+          data_limite?: string | null
+          descricao?: string | null
+          documento_id?: string
+          id?: string
+          responsavel?: string | null
+          status?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documento_demandas_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documento_opcoes: {
         Row: {
           created_at: string
@@ -187,6 +234,7 @@ export type Database = {
       }
       documentos: {
         Row: {
+          atualizacao_recorrente: boolean
           categoria: string | null
           cnpj: string | null
           created_at: string
@@ -197,10 +245,15 @@ export type Database = {
           descricao: string | null
           empresa: string | null
           id: string
+          intervalo_atualizacao_dias: number | null
           nome: string
           numero_documento: string | null
           observacoes: string | null
           orgao_emissor: string | null
+          proxima_atualizacao: string | null
+          recorrencia_dia_base: number | null
+          recorrencia_mensal_modo: string | null
+          recorrencia_tipo: string | null
           renovacao_obrigatoria: boolean
           responsavel: string | null
           status: string
@@ -214,6 +267,7 @@ export type Database = {
           versao_atual: number
         }
         Insert: {
+          atualizacao_recorrente?: boolean
           categoria?: string | null
           cnpj?: string | null
           created_at?: string
@@ -224,10 +278,15 @@ export type Database = {
           descricao?: string | null
           empresa?: string | null
           id?: string
+          intervalo_atualizacao_dias?: number | null
           nome: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
+          recorrencia_dia_base?: number | null
+          recorrencia_mensal_modo?: string | null
+          recorrencia_tipo?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
@@ -241,6 +300,7 @@ export type Database = {
           versao_atual?: number
         }
         Update: {
+          atualizacao_recorrente?: boolean
           categoria?: string | null
           cnpj?: string | null
           created_at?: string
@@ -251,10 +311,15 @@ export type Database = {
           descricao?: string | null
           empresa?: string | null
           id?: string
+          intervalo_atualizacao_dias?: number | null
           nome?: string
           numero_documento?: string | null
           observacoes?: string | null
           orgao_emissor?: string | null
+          proxima_atualizacao?: string | null
+          recorrencia_dia_base?: number | null
+          recorrencia_mensal_modo?: string | null
+          recorrencia_tipo?: string | null
           renovacao_obrigatoria?: boolean
           responsavel?: string | null
           status?: string
@@ -543,6 +608,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      gerar_demandas_documentos_recorrentes: {
+        Args: never
+        Returns: {
+          out_data_limite: string
+          out_demanda_id: string
+          out_documento_id: string
+          out_documento_nome: string
+          out_responsavel: string
+        }[]
+      }
       has_any_role: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
@@ -550,6 +625,16 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      proxima_data_recorrente: {
+        Args: {
+          p_apos: string
+          p_criado_em: string
+          p_dia_base: number
+          p_modo_mensal: string
+          p_tipo: string
+        }
+        Returns: string
       }
     }
     Enums: {
