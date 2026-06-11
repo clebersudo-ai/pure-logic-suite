@@ -194,17 +194,17 @@ type RecorrenciaTipo = "diaria" | "quinzenal" | "mensal";
 type RecorrenciaMensalModo = "dia_fixo" | "data_cadastro";
 
 async function updateDocumentoPayload(id: string, payload: Record<string, any>) {
-  const { error } = await supabase.from("documentos").update(payload).eq("id", id);
+  const { error } = await (supabase.from("documentos") as any).update(payload).eq("id", id);
   return { error };
 }
 
 async function insertDocumentoPayload(payload: Record<string, any>) {
-  const { error } = await supabase.from("documentos").insert(payload);
+  const { error } = await (supabase.from("documentos") as any).insert(payload);
   return { error };
 }
 
 async function insertDocumentoPayloadReturningId(payload: Record<string, any>) {
-  const { data, error } = await supabase.from("documentos").insert(payload).select("id").single();
+  const { data, error } = await (supabase.from("documentos") as any).insert(payload).select("id").single();
   return { data, error };
 }
 
