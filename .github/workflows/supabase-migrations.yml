@@ -52,6 +52,11 @@ jobs:
           scheme, remainder = raw.split("://", 1)
           userinfo, host = remainder.rsplit("@", 1)
           username, password = userinfo.split(":", 1)
+
+          if host.startswith("db.dsdnlcnwrpapmwkiaejx.supabase.co"):
+              username = "postgres.dsdnlcnwrpapmwkiaejx"
+              host = "aws-0-us-west-2.pooler.supabase.com:5432/postgres"
+
           normalized = (
               f"{scheme}://{quote(unquote(username), safe='')}:"
               f"{quote(unquote(password), safe='')}@{host}"
