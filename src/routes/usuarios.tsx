@@ -30,12 +30,23 @@ const ROLES: Array<{ value: AppRole; label: string; description: string }> = [
   { value: "estoque", label: "Estoque", description: "Gerencia matérias-primas e movimentações de estoque." },
 ];
 
+const DEFAULT_CATEGORIAS = [
+  "EMPRESARIAL",
+  "REGULATÓRIO",
+  "QUALIDADE",
+  "FISCAL / CONTÁBIL",
+  "MAPAS CONTROLADOS",
+  "ADMINISTRATIVO",
+  "FUNCIONÁRIOS / TRABALHISTA",
+];
+
 type UserRole = { id: string; role: AppRole };
 type UserRow = {
   id: string;
   nome: string | null;
   email: string | null;
   roles: UserRole[];
+  categorias: string[];
 };
 
 type UserForm = {
@@ -43,6 +54,7 @@ type UserForm = {
   email: string;
   password: string;
   roles: AppRole[];
+  categorias: string[];
 };
 
 const emptyForm: UserForm = {
@@ -50,6 +62,7 @@ const emptyForm: UserForm = {
   email: "",
   password: "",
   roles: ["comercial"],
+  categorias: [],
 };
 
 function Usuarios() {
@@ -66,18 +79,41 @@ function Usuarios() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users-with-roles"],
     queryFn: async () => {
-      const [{ data: profiles, error: profilesError }, { data: roles, error: rolesError }] = await Promise.all([
+      const [
+        { data: profiles, error: profilesError },
+        { data: roles, error: rolesError },
+        { data: access, error: accessError },
+      ] = await Promise.all([
         supabase.from("profiles").select("*").order("nome"),
         supabase.from("user_roles").select("*"),
+        supabase.from("user_documento_categorias").select("*"),
       ]);
       if (profilesError) throw profilesError;
       if (rolesError) throw rolesError;
+      if (accessError) throw accessError;
       return ((profiles ?? []) as Array<{ id: string; nome: string | null; email: string | null }>).map((profile) => ({
         ...profile,
         roles: ((roles ?? []) as Array<{ id: string; user_id: string; role: AppRole }>)
           .filter((role) => role.user_id === profile.id)
           .map((role) => ({ id: role.id, role: role.role })),
+        categorias: ((access ?? []) as Array<{ user_id: string; categoria: string }>)
+          .filter((item) => item.user_id === profile.id)
+          .map((item) => item.categoria),
       }));
+    },
+  });
+
+  const { data: categorias = [] } = useQuery({
+    queryKey: ["documento-categorias-opcoes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("documento_opcoes")
+        .select("valor, label")
+        .eq("tipo", "categoria")
+        .order("valor", { ascending: true });
+      if (error) throw error;
+      const saved = (data ?? []).map(item => item.label || item.valor).filter(Boolean);
+      return Array.from(new Set([...DEFAULT_CATEGORIAS, ...saved]));
     },
   });
 
@@ -98,6 +134,7 @@ function Usuarios() {
       email: row.email ?? "",
       password: "",
       roles: row.roles.map(role => role.role),
+      categorias: row.categorias,
     });
     setDialogOpen(true);
   }
@@ -108,6 +145,15 @@ function Usuarios() {
         ? current.roles.filter(item => item !== role)
         : [...current.roles, role];
       return { ...current, roles };
+    });
+  }
+
+  function toggleCategoria(categoria: string) {
+    setForm(current => {
+      const categorias = current.categorias.includes(categoria)
+        ? current.categorias.filter(item => item !== categoria)
+        : [...current.categorias, categoria];
+      return { ...current, categorias };
     });
   }
 
@@ -125,6 +171,7 @@ function Usuarios() {
         email: form.email,
         password: form.password || undefined,
         roles: form.roles,
+        categorias: form.categorias,
       };
       if (editing) await updateUser({ data: payload });
       else await createUser({ data: payload });
@@ -175,14 +222,15 @@ function Usuarios() {
               <TableHead>Nome</TableHead>
               <TableHead>E-mail / login</TableHead>
               <TableHead>Níveis de acesso</TableHead>
+              <TableHead>Categorias</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={4}><EmptyState label="Carregando usuários..." /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={5}><EmptyState label="Carregando usuários..." /></TableCell></TableRow>
             ) : users.length === 0 ? (
-              <TableRow><TableCell colSpan={4}><EmptyState label="Nenhum usuário cadastrado" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={5}><EmptyState label="Nenhum usuário cadastrado" /></TableCell></TableRow>
             ) : users.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">{row.nome || "Sem nome"}</TableCell>
@@ -196,6 +244,18 @@ function Usuarios() {
                       </Badge>
                     ))}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {row.roles.some(role => role.role === "administrador") ? (
+                    <Badge>Todas</Badge>
+                  ) : (
+                    <div className="flex max-w-[320px] flex-wrap gap-1">
+                      {row.categorias.length === 0 && <span className="text-xs text-muted-foreground">sem categorias</span>}
+                      {row.categorias.map(categoria => (
+                        <Badge key={categoria} variant="outline">{categoria}</Badge>
+                      ))}
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
@@ -250,6 +310,33 @@ function Usuarios() {
                       <span className="block font-medium leading-none">{role.label}</span>
                       <span className="mt-1 block text-xs text-muted-foreground">{role.description}</span>
                     </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Categorias permitidas</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Administradores têm acesso total automaticamente.
+                  </div>
+                </div>
+                <Badge variant={form.roles.includes("administrador") ? "default" : "outline"}>
+                  {form.roles.includes("administrador") ? "Todas" : `${form.categorias.length} selecionada${form.categorias.length === 1 ? "" : "s"}`}
+                </Badge>
+              </div>
+              <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+                {categorias.length === 0 ? (
+                  <div className="text-sm text-muted-foreground sm:col-span-2">Nenhuma categoria cadastrada</div>
+                ) : categorias.map(categoria => (
+                  <label key={categoria} className={`flex items-center gap-2 text-sm ${form.roles.includes("administrador") ? "opacity-60" : ""}`}>
+                    <Checkbox
+                      checked={form.roles.includes("administrador") || form.categorias.includes(categoria)}
+                      disabled={form.roles.includes("administrador")}
+                      onCheckedChange={() => toggleCategoria(categoria)}
+                    />
+                    <span>{categoria}</span>
                   </label>
                 ))}
               </div>

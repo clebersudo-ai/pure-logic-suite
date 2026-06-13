@@ -15,6 +15,7 @@ type UpsertUserPayload = AdminPayload & {
   email: string;
   password?: string;
   roles: AppRole[];
+  categorias: string[];
 };
 
 type DeleteUserPayload = AdminPayload & {
@@ -73,6 +74,27 @@ async function replaceRoles(userId: string, roles: AppRole[]) {
   if (insertError) throw insertError;
 }
 
+async function replaceCategorias(userId: string, categorias: string[], roles: AppRole[]) {
+  const isAdmin = roles.includes("administrador");
+  const nextCategorias = Array.from(new Set(categorias.map(c => c.trim()).filter(Boolean)));
+  if (!isAdmin && nextCategorias.length === 0) {
+    throw new Error("Selecione pelo menos uma categoria para este usuário");
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from("user_documento_categorias")
+    .delete()
+    .eq("user_id", userId);
+  if (deleteError) throw deleteError;
+
+  if (isAdmin || nextCategorias.length === 0) return;
+
+  const { error: insertError } = await supabaseAdmin
+    .from("user_documento_categorias")
+    .insert(nextCategorias.map(categoria => ({ user_id: userId, categoria })));
+  if (insertError) throw insertError;
+}
+
 export const createManagedUser = createServerFn({ method: "POST" })
   .inputValidator((data: UpsertUserPayload) => data)
   .handler(async ({ data }) => {
@@ -87,6 +109,9 @@ export const createManagedUser = createServerFn({ method: "POST" })
     if (!email) throw new Error("Informe o e-mail");
     if (password.length < 6) throw new Error("A senha deve ter pelo menos 6 caracteres");
     if (roles.length === 0) throw new Error("Selecione pelo menos um nível de acesso");
+    if (!roles.includes("administrador") && data.categorias.length === 0) {
+      throw new Error("Selecione pelo menos uma categoria para este usuário");
+    }
 
     const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -102,6 +127,7 @@ export const createManagedUser = createServerFn({ method: "POST" })
     if (profileError) throw profileError;
 
     await replaceRoles(created.user.id, roles);
+    await replaceCategorias(created.user.id, data.categorias, roles);
     return { id: created.user.id };
   });
 
@@ -120,6 +146,9 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     if (!email) throw new Error("Informe o e-mail");
     if (password && password.length < 6) throw new Error("A senha deve ter pelo menos 6 caracteres");
     if (roles.length === 0) throw new Error("Selecione pelo menos um nível de acesso");
+    if (!roles.includes("administrador") && data.categorias.length === 0) {
+      throw new Error("Selecione pelo menos uma categoria para este usuário");
+    }
 
     const attributes: { email: string; password?: string; user_metadata: { nome: string } } = {
       email,
@@ -136,6 +165,7 @@ export const updateManagedUser = createServerFn({ method: "POST" })
     if (profileError) throw profileError;
 
     await replaceRoles(data.id, roles);
+    await replaceCategorias(data.id, data.categorias, roles);
     return { id: data.id };
   });
 

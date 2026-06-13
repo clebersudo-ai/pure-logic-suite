@@ -366,9 +366,11 @@ function optionValueItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, f
 
 function DocumentosPage() {
   const { user, hasRole } = useAuth();
-  const canEdit = hasRole("administrador") || hasRole("comercial");
+  const isAdmin = hasRole("administrador");
+  const canEdit = isAdmin || hasRole("comercial");
   const [docs, setDocs] = useState<Documento[]>([]);
   const [options, setOptions] = useState<DocumentoOpcao[]>([]);
+  const [allowedCategorias, setAllowedCategorias] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [fCategoria, setFCategoria] = useState("__all");
@@ -384,7 +386,11 @@ function DocumentosPage() {
   const [smartOpen, setSmartOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
 
-  const categorias = useMemo(() => optionTextItems(options, "categoria", DEFAULT_CATEGORIAS), [options]);
+  const categorias = useMemo(() => {
+    const all = optionTextItems(options, "categoria", DEFAULT_CATEGORIAS);
+    if (isAdmin || allowedCategorias == null) return all;
+    return all.filter(categoria => allowedCategorias.includes(categoria));
+  }, [options, allowedCategorias, isAdmin]);
   const orgaos = useMemo(() => optionTextItems(options, "orgao", DEFAULT_ORGAOS), [options]);
   const responsaveisOpcoes = useMemo(() => optionTextItems(options, "responsavel", []), [options]);
   const statusOpcoes = useMemo(() => optionValueItems(options, "status", DEFAULT_STATUS_OPTIONS), [options]);
@@ -397,16 +403,21 @@ function DocumentosPage() {
 
   async function load() {
     setLoading(true);
-    const [docsRes, optsRes] = await Promise.all([
+    const shouldLoadAccess = !!user && !isAdmin;
+    const [docsRes, optsRes, accessRes] = await Promise.all([
       supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
-      supabase.from("documento_opcoes").select("*").order("valor", { ascending: true })
+      supabase.from("documento_opcoes").select("*").order("valor", { ascending: true }),
+      shouldLoadAccess
+        ? supabase.from("user_documento_categorias").select("categoria").eq("user_id", user.id)
+        : Promise.resolve({ data: null, error: null }),
     ]);
 
     setDocs((docsRes.data as any as Documento[]) ?? []);
     setOptions((optsRes.data as DocumentoOpcao[]) ?? []);
+    setAllowedCategorias(isAdmin ? null : ((accessRes.data as Array<{ categoria: string }> | null) ?? []).map(item => item.categoria));
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [user?.id, isAdmin]);
 
   const responsaveis = useMemo(
     () => Array.from(new Set([

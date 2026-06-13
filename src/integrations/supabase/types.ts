@@ -585,6 +585,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_documento_categorias: {
+        Row: {
+          categoria: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          categoria: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -619,6 +640,10 @@ export type Database = {
         }[]
       }
       has_any_role: { Args: { _user_id: string }; Returns: boolean }
+      has_documento_categoria_access: {
+        Args: { _categoria: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
