@@ -215,30 +215,4 @@ CREATE POLICY "Documento demandas delete"
   TO authenticated
   USING (public.has_role(auth.uid(),'administrador'));
 
-DROP POLICY IF EXISTS "Documentos bucket read" ON storage.objects;
-
-CREATE POLICY "Documentos bucket read"
-  ON storage.objects FOR SELECT
-  TO authenticated
-  USING (
-    bucket_id = 'documentos'
-    AND (
-      public.has_role(auth.uid(), 'administrador')
-      OR EXISTS (
-        SELECT 1
-        FROM public.documento_versoes dv
-        JOIN public.documentos d ON d.id = dv.documento_id
-        WHERE dv.storage_path = storage.objects.name
-          AND public.has_documento_categoria_access(auth.uid(), d.categoria)
-      )
-      OR EXISTS (
-        SELECT 1
-        FROM public.documento_anexos da
-        JOIN public.documentos d ON d.id = da.documento_id
-        WHERE da.storage_path = storage.objects.name
-          AND public.has_documento_categoria_access(auth.uid(), d.categoria)
-      )
-    )
-  );
-
 NOTIFY pgrst, 'reload schema';
