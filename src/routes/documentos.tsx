@@ -81,7 +81,7 @@ const CATEGORIAS_TREE: Record<string, string[]> = {
 };
 const CATEGORIAS_PRINCIPAIS = Object.keys(CATEGORIAS_TREE);
 const DEFAULT_CATEGORIAS = CATEGORIAS_PRINCIPAIS;
-const DEFAULT_ORGAOS = ["ANVISA", "IBAMA", "CETESB", "CADRI", "Vigilância Sanitária", "Corpo de Bombeiros", "Polícia Civil", "Polícia Federal", "Exército", "Receita Federal", "Prefeitura", "Ministério do Trabalho", "Junta Comercial", "Outros"];
+const DEFAULT_ORGAOS = ["Policia Civil", "Policia Federal", "Exército", "Anvisa", "Vigilância Sanitária", "IBAMA", "Corpo de Bombeiro", "VRE / SIL", "Cetesb", "CADRI", "Prefeitura", "Outros"];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
   { value: "em_renovacao", label: "Em renovação" },
