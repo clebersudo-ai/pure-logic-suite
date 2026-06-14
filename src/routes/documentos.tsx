@@ -1523,6 +1523,17 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
     await loadAll();
   }
 
+  async function removerDemanda(demanda: DocumentoDemanda) {
+    if (!canEdit) return;
+    const ok = confirm(`Excluir a demanda "${demanda.titulo}"?`);
+    if (!ok) return;
+    const { error } = await supabase.from("documento_demandas").delete().eq("id", demanda.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Demanda excluída");
+    await loadAll();
+    await onChanged();
+  }
+
   function onDrop(e: React.DragEvent, kind: "versao" | "anexo") {
     e.preventDefault(); setDragOver(false);
     if (!canEdit) return;
@@ -1670,6 +1681,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
                 demandas={demandas}
                 onConcluir={(id) => atualizarStatusDemanda(id, "concluida")}
                 onReabrir={(id) => atualizarStatusDemanda(id, "aberta")}
+                onRemove={canEdit ? removerDemanda : undefined}
               />
             </TabsContent>
           </Tabs>
@@ -2340,10 +2352,11 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
   );
 }
 
-function DemandasList({ demandas, onConcluir, onReabrir }: {
+function DemandasList({ demandas, onConcluir, onReabrir, onRemove }: {
   demandas: DocumentoDemanda[];
   onConcluir: (id: string) => void;
   onReabrir: (id: string) => void;
+  onRemove?: (demanda: DocumentoDemanda) => void;
 }) {
   if (demandas.length === 0) return <EmptyState label="Nenhuma demanda gerada para este documento" />;
 
@@ -2374,13 +2387,27 @@ function DemandasList({ demandas, onConcluir, onReabrir }: {
               </div>
               {d.descricao && <div className="mt-1 text-xs text-muted-foreground">{d.descricao}</div>}
             </div>
-            {d.status === "concluida" ? (
-              <Button size="sm" variant="outline" onClick={() => onReabrir(d.id)}>Reabrir</Button>
-            ) : (
-              <Button size="sm" variant="outline" onClick={() => onConcluir(d.id)}>
-                <CheckCircle2 className="h-4 w-4" /> Concluir
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {d.status === "concluida" ? (
+                <Button size="sm" variant="outline" onClick={() => onReabrir(d.id)}>Reabrir</Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => onConcluir(d.id)}>
+                  <CheckCircle2 className="h-4 w-4" /> Concluir
+                </Button>
+              )}
+              {onRemove && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                  onClick={() => onRemove(d)}
+                  title="Excluir demanda"
+                  aria-label={`Excluir demanda ${d.titulo}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         );
       })}
