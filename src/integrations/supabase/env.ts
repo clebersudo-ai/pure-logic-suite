@@ -4,10 +4,10 @@ type RuntimeGlobal = typeof globalThis & {
 };
 
 const LOVABLE_CLOUD_PUBLIC_ENV: RuntimeEnv = {
-  SUPABASE_URL: "https://kydwpwckgkxpdesoppcs.supabase.co",
-  VITE_SUPABASE_URL: "https://kydwpwckgkxpdesoppcs.supabase.co",
-  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_Qnoq1NztQk_RaepmPQKsRQ_2WrND9SK",
-  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_Qnoq1NztQk_RaepmPQKsRQ_2WrND9SK",
+  SUPABASE_URL: "https://dsdnlcnwrpapmwkiaejx.supabase.co",
+  VITE_SUPABASE_URL: "https://dsdnlcnwrpapmwkiaejx.supabase.co",
+  SUPABASE_PUBLISHABLE_KEY: "sb_publishable_YKDtT-mgT7bRJTbHffIQLQ_RLRIdC2C",
+  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_YKDtT-mgT7bRJTbHffIQLQ_RLRIdC2C",
 };
 
 function normalizeRuntimeEnv(env: unknown): RuntimeEnv {
