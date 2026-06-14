@@ -191,6 +191,26 @@ function fmtIntervalo(dias: number | null) {
 
 type RecorrenciaTipo = "diaria" | "quinzenal" | "mensal";
 type RecorrenciaMensalModo = "dia_fixo" | "data_cadastro";
+type ValidadeIndeterminadaState = {
+  validade_indeterminada: boolean;
+  data_validade: string;
+  atualizacao_recorrente: boolean;
+  proxima_atualizacao: string;
+  renovacao_obrigatoria: boolean;
+};
+
+function toggleValidadeIndeterminada<T extends ValidadeIndeterminadaState>(state: T, enabled: boolean): T {
+  return {
+    ...state,
+    validade_indeterminada: enabled,
+    ...(enabled ? {
+      data_validade: "",
+      atualizacao_recorrente: false,
+      proxima_atualizacao: "",
+      renovacao_obrigatoria: false,
+    } : {}),
+  };
+}
 
 async function updateDocumentoPayload(id: string, payload: Record<string, any>) {
   const { error } = await (supabase.from("documentos") as any).update(payload).eq("id", id);
@@ -969,6 +989,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
     responsavel: documento?.responsavel ?? "",
     data_emissao: documento?.data_emissao ?? "",
     data_validade: documento?.data_validade ?? "",
+    validade_indeterminada: isEdit ? !documento?.data_validade : false,
     atualizacao_recorrente: documento?.atualizacao_recorrente ?? false,
     recorrencia_tipo: documento?.recorrencia_tipo ?? "mensal",
     recorrencia_dia_base: documento?.recorrencia_dia_base ? String(documento.recorrencia_dia_base) : "1",
@@ -982,8 +1003,8 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
   });
 
   useEffect(() => {
-    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s, documento?.created_at) }));
-  }, [f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo, documento?.created_at]);
+    setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s, documento?.created_at) }));
+  }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo, documento?.created_at]);
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiFile, setAiFile] = useState<File | null>(null);
@@ -1021,6 +1042,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
         const next = { ...prev };
         const keys = ["nome", "numero_documento", "orgao_emissor", "categoria", "data_emissao", "data_validade", "empresa", "responsavel", "observacoes"] as const;
         for (const k of keys) {
+          if (k === "data_validade" && next.validade_indeterminada) continue;
           const v = (result as any)?.[k];
           if (v && String(v).trim()) {
             (next as any)[k] = String(v).trim();
@@ -1052,14 +1074,14 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       unidade: f.unidade || null,
       responsavel: f.responsavel || null,
       data_emissao: f.data_emissao || null,
-      data_validade: f.data_validade || null,
-      atualizacao_recorrente: f.atualizacao_recorrente,
+      data_validade: f.validade_indeterminada ? null : f.data_validade || null,
+      atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
       intervalo_atualizacao_dias: null,
-      recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-      recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-      recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-      proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
-      renovacao_obrigatoria: f.renovacao_obrigatoria,
+      recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+      recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+      recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+      proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+      renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
       criticidade: f.criticidade,
       status: f.status,
       observacoes: f.observacoes || null,
@@ -1193,16 +1215,32 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
             <Input type="date" className={aiCls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
           </FormField>
           <FormField label="Validade">
-            <Input type="date" className={aiCls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
+            <div className="flex gap-2">
+              <Input
+                type="date"
+                className={aiCls("data_validade")}
+                value={f.data_validade}
+                disabled={f.validade_indeterminada}
+                onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))}
+              />
+              <Button
+                type="button"
+                variant={f.validade_indeterminada ? "default" : "outline"}
+                className="whitespace-nowrap"
+                onClick={() => setF(s => toggleValidadeIndeterminada(s, !s.validade_indeterminada))}
+              >
+                Indeterminada
+              </Button>
+            </div>
           </FormField>
           <div className="flex items-center justify-between rounded-md border p-3 sm:col-span-2">
             <div>
               <Label className="text-sm font-medium">Atualização recorrente</Label>
               <p className="text-xs text-muted-foreground">Use para mapas, exames e documentos que precisam ser atualizados periodicamente.</p>
             </div>
-            <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+            <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
           </div>
-          {f.atualizacao_recorrente && (
+          {!f.validade_indeterminada && f.atualizacao_recorrente && (
             <>
               <FormField label="Repetir em:">
                 <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
@@ -1277,7 +1315,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <Label className="text-sm font-medium">Renovação obrigatória</Label>
               <p className="text-xs text-muted-foreground">Marque se este documento exige processo formal de renovação.</p>
             </div>
-            <Switch checked={f.renovacao_obrigatoria} onCheckedChange={(v) => setF(s => ({ ...s, renovacao_obrigatoria: v }))} />
+            <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.renovacao_obrigatoria} onCheckedChange={(v) => setF(s => ({ ...s, renovacao_obrigatoria: v }))} />
           </div>
           <div className="sm:col-span-2">
             <FormField label="Observações">
@@ -1790,13 +1828,14 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
     tipo_documento: "", nome: "", numero_documento: "", orgao_emissor: "",
     categoria: "", subcategoria: "", data_emissao: "", data_validade: "", empresa: "",
     cnpj: "", uf: "", responsavel: "", observacoes: "",
+    validade_indeterminada: false,
     atualizacao_recorrente: false, recorrencia_tipo: "mensal", recorrencia_dia_base: "1", recorrencia_mensal_modo: "dia_fixo", proxima_atualizacao: "",
     criticidade: "media", renovacao_obrigatoria: false,
   });
 
   useEffect(() => {
-    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s) }));
-  }, [f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo]);
+    setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s) }));
+  }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo]);
 
   function pickFile(file: File) {
     if (preview) URL.revokeObjectURL(preview.url);
@@ -1844,6 +1883,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       const keys = ["tipo_documento", "nome", "numero_documento", "orgao_emissor", "categoria",
         "data_emissao", "data_validade", "empresa", "cnpj", "uf", "responsavel", "observacoes"] as const;
       for (const k of keys) {
+        if (k === "data_validade" && next.validade_indeterminada) continue;
         const v = (result as any)?.[k];
         if (v && String(v).trim()) {
           (next as any)[k] = String(v).trim();
@@ -1901,14 +1941,14 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           uf: f.uf || null,
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
-          data_validade: f.data_validade || null,
-          atualizacao_recorrente: f.atualizacao_recorrente,
+          data_validade: f.validade_indeterminada ? null : f.data_validade || null,
+          atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
           intervalo_atualizacao_dias: null,
-          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
-          renovacao_obrigatoria: f.renovacao_obrigatoria,
+          recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+          proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+          renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
           validado_ia: true,
@@ -1932,14 +1972,14 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           uf: f.uf || null,
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
-          data_validade: f.data_validade || null,
-          atualizacao_recorrente: f.atualizacao_recorrente,
+          data_validade: f.validade_indeterminada ? null : f.data_validade || null,
+          atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
           intervalo_atualizacao_dias: null,
-          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
-          renovacao_obrigatoria: f.renovacao_obrigatoria,
+          recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+          proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+          renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
           status: "ativo",
@@ -1978,7 +2018,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       const demandaGerada = await gerarDemandasRecorrentes(docId, {
         nome: f.nome,
         responsavel: f.responsavel || null,
-        atualizacao_recorrente: f.atualizacao_recorrente,
+        atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
         recorrencia_tipo: f.recorrencia_tipo,
         recorrencia_dia_base: Number(f.recorrencia_dia_base) || null,
         recorrencia_mensal_modo: f.recorrencia_mensal_modo,
@@ -2185,16 +2225,32 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                   <Input type="date" className={cls("data_emissao")} value={f.data_emissao} onChange={(e) => setF(s => ({ ...s, data_emissao: e.target.value }))} />
                 </FormField>
                 <FormField label="Validade">
-                  <Input type="date" className={cls("data_validade")} value={f.data_validade} onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      className={cls("data_validade")}
+                      value={f.data_validade}
+                      disabled={f.validade_indeterminada}
+                      onChange={(e) => setF(s => ({ ...s, data_validade: e.target.value }))}
+                    />
+                    <Button
+                      type="button"
+                      variant={f.validade_indeterminada ? "default" : "outline"}
+                      className="whitespace-nowrap"
+                      onClick={() => setF(s => toggleValidadeIndeterminada(s, !s.validade_indeterminada))}
+                    >
+                      Indeterminada
+                    </Button>
+                  </div>
                 </FormField>
                 <div className="col-span-2 flex items-center justify-between rounded-md border p-2">
                   <div>
                     <Label className="text-xs">Atualização recorrente</Label>
                     <p className="text-[11px] text-muted-foreground">Para mapas, exames e documentos periódicos.</p>
                   </div>
-                  <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+                  <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
                 </div>
-                {f.atualizacao_recorrente && (
+                {!f.validade_indeterminada && f.atualizacao_recorrente && (
                   <>
                     <FormField label="Repetir em:">
                       <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
@@ -2258,7 +2314,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 </FormField>
                 <div className="col-span-2 flex items-center justify-between rounded-md border p-2">
                   <Label className="text-xs">Renovação obrigatória</Label>
-                  <Switch checked={f.renovacao_obrigatoria} onCheckedChange={(v) => setF(s => ({ ...s, renovacao_obrigatoria: v }))} />
+                  <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.renovacao_obrigatoria} onCheckedChange={(v) => setF(s => ({ ...s, renovacao_obrigatoria: v }))} />
                 </div>
                 <div className="col-span-2">
                   <FormField label="Observações">
