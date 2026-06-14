@@ -57,26 +57,25 @@ const CATEGORIAS_TREE: Record<string, string[]> = {
   ],
   "REGULATÓRIO": [
     "AFE - ANVISA", "CRQ", "CETESB", "CADRI", "IBAMA",
-    "Controle de Resíduos - CETESB", "Vigilância Sanitária Municipal",
-    "VRE / Via Rápida Empresa", "Corpo de Bombeiros",
-    "Alvará de Funcionamento Prefeitura",
-    "Polícia Civil", "Polícia Federal", "Exército",
+    "Controle de Resíduos", "Vigilância Sanitária Municipal",
+    "VRE / Viabilidade Empresarial", "Corpo de Bombeiros",
+    "Prefeitura / Alvará",
+  ],
+  "SEGURANÇA E SST": [
+    "PGR", "PCMSO", "LTCAT", "ASO",
+  ],
+  "PRODUTOS CONTROLADOS": [
+    "Polícia Civil", "Polícia Federal", "Exército", "MAPA Produtos Controlados",
   ],
   "QUALIDADE": [
     "POP", "IT", "Manual da Qualidade", "Registros CQ",
-    "FISPQ", "Boletins Técnicos", "Treinamentos",
+    "FISPQ", "Boletins Técnicos",
+  ],
+  "RH / ADMINISTRATIVO": [
+    "Contratos", "Procurações", "Documentos Funcionários", "Prestadores",
   ],
   "FISCAL / CONTÁBIL": [
     "Certidões", "Débitos", "Balancetes", "SPED", "Simples Nacional",
-  ],
-  "MAPAS CONTROLADOS": [
-    "MAPA Produtos Controlados",
-  ],
-  "ADMINISTRATIVO": [
-    "Contratos", "Procurações",
-  ],
-  "FUNCIONÁRIOS / TRABALHISTA": [
-    "Documentos Funcionários", "PGR", "PCMSO", "LTCAT", "ASO",
   ],
 };
 const CATEGORIAS_PRINCIPAIS = Object.keys(CATEGORIAS_TREE);

@@ -33,11 +33,11 @@ const ROLES: Array<{ value: AppRole; label: string; description: string }> = [
 const DEFAULT_CATEGORIAS = [
   "EMPRESARIAL",
   "REGULATÓRIO",
+  "SEGURANÇA E SST",
+  "PRODUTOS CONTROLADOS",
   "QUALIDADE",
+  "RH / ADMINISTRATIVO",
   "FISCAL / CONTÁBIL",
-  "MAPAS CONTROLADOS",
-  "ADMINISTRATIVO",
-  "FUNCIONÁRIOS / TRABALHISTA",
 ];
 
 type UserRole = { id: string; role: AppRole };
