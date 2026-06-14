@@ -418,6 +418,45 @@ function DocumentosPage() {
   }
   useEffect(() => { load(); }, [user?.id, isAdmin]);
 
+  async function removerDocumento(doc: Documento) {
+    if (!canEdit) return;
+    const ok = confirm(`Excluir o documento "${doc.nome}"? Esta ação também removerá versões, anexos e demandas vinculadas.`);
+    if (!ok) return;
+
+    const [versoesRes, anexosRes] = await Promise.all([
+      supabase.from("documento_versoes").select("storage_path").eq("documento_id", doc.id),
+      supabase.from("documento_anexos").select("storage_path").eq("documento_id", doc.id),
+    ]);
+
+    if (versoesRes.error) { toast.error(versoesRes.error.message); return; }
+    if (anexosRes.error) { toast.error(anexosRes.error.message); return; }
+
+    const storagePaths = [
+      ...((versoesRes.data ?? []) as Array<{ storage_path: string }>),
+      ...((anexosRes.data ?? []) as Array<{ storage_path: string }>),
+    ].map(item => item.storage_path).filter(Boolean);
+
+    if (storagePaths.length > 0) {
+      const { error } = await supabase.storage.from(BUCKET).remove(storagePaths);
+      if (error) { toast.error(error.message); return; }
+    }
+
+    const deletes = [
+      await supabase.from("documento_demandas").delete().eq("documento_id", doc.id),
+      await supabase.from("documento_anexos").delete().eq("documento_id", doc.id),
+      await supabase.from("documento_versoes").delete().eq("documento_id", doc.id),
+    ];
+    const deleteError = deletes.find(res => res.error)?.error;
+    if (deleteError) { toast.error(deleteError.message); return; }
+
+    const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
+    if (error) { toast.error(error.message); return; }
+
+    if (selected?.id === doc.id) setSelected(null);
+    toast.success("Documento excluído");
+    await load();
+  }
+
   const responsaveis = useMemo(
     () => Array.from(new Set([
       ...responsaveisOpcoes,
@@ -748,6 +787,18 @@ function DocumentosPage() {
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(doc); }}>
                         <Eye className="h-4 w-4" /> Abrir
                       </Button>
+                      {canEdit && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); removerDocumento(doc); }}
+                          title="Excluir documento"
+                          aria-label={`Excluir documento ${doc.nome}`}
+                        >
+                          <Trash2 className="h-4 w-4" /> Excluir
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
