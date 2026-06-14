@@ -786,8 +786,9 @@ function DocumentosPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Documento</TableHead>
-              <TableHead>Categoria / Órgão</TableHead>
+              <TableHead>Subcategoria</TableHead>
+              <TableHead>Nome do documento</TableHead>
+              <TableHead>Categorias</TableHead>
               <TableHead>Empresa / Unidade</TableHead>
               <TableHead>Responsável</TableHead>
               <TableHead>Validade</TableHead>
@@ -797,14 +798,15 @@ function DocumentosPage() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7}><EmptyState label="Carregando…" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8}><EmptyState label="Carregando…" /></TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={7}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={8}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
             ) : filtered.map(({ doc, situacao, dias }) => {
               const meta = SITUACAO_META[situacao];
               const Icon = meta.icon;
               return (
                 <TableRow key={doc.id} className="cursor-pointer" onClick={() => setSelected(doc)}>
+                  <TableCell className="text-sm">{doc.subcategoria ?? "—"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -823,13 +825,7 @@ function DocumentosPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {doc.categoria ?? "—"}
-                      {doc.subcategoria && <span className="text-muted-foreground"> › {doc.subcategoria}</span>}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{doc.orgao_emissor ?? "—"}</div>
-                  </TableCell>
+                  <TableCell className="text-sm">{doc.categoria ?? "—"}</TableCell>
                   <TableCell>
                     <div className="text-sm">{doc.empresa ?? "—"}</div>
                     <div className="text-xs text-muted-foreground">{doc.unidade ?? "—"}</div>
