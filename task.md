@@ -13,14 +13,14 @@ Este arquivo serve como o direcionamento oficial de tarefas para a implementaç�
 ### 1. Reorganização das Categorias e Subcategorias
 A árvore de pastas (categorias e subcategorias) no arquivo `src/routes/documentos.tsx` (objeto `CATEGORIAS_TREE`) deve ser reestruturada exatamente conforme as definições abaixo:
 
-- [ ] **EMPRESARIAL**
+- [x] **EMPRESARIAL**
   - Contrato Social
   - Alterações Contratuais
   - CNPJ
   - Inscrição Estadual
   - Inscrição Municipal
   - Certificados Digitais
-- [ ] **REGULATÓRIO**
+- [x] **REGULATÓRIO**
   - AFE – ANVISA
   - CRQ
   - CETESB
@@ -31,17 +31,17 @@ A árvore de pastas (categorias e subcategorias) no arquivo `src/routes/document
   - VRE / Viabilidade Empresarial (renomear de "Via Rápida Empresa")
   - Corpo de Bombeiros
   - Prefeitura / Alvará (renomear de "Alvará de Funcionamento Prefeitura")
-- [ ] **SEGURANÇA E SST** (Nova categoria principal - mover itens que estavam em trabalhista)
+- [x] **SEGURANÇA E SST** (Nova categoria principal - mover itens que estavam em trabalhista)
   - PGR
   - PCMSO
   - LTCAT
   - ASO
-- [ ] **PRODUTOS CONTROLADOS** (Nova categoria principal)
+- [x] **PRODUTOS CONTROLADOS** (Nova categoria principal)
   - Polícia Civil (mover de regulatório)
   - Polícia Federal (mover de regulatório)
   - Exército (mover de regulatório)
   - MAPA Produtos Controlados (criar/mover para esta categoria)
-- [ ] **QUALIDADE**
+- [x] **QUALIDADE**
   - POP
   - IT
   - Manual da Qualidade
@@ -49,12 +49,12 @@ A árvore de pastas (categorias e subcategorias) no arquivo `src/routes/document
   - FISPQ
   - Boletins Técnicos
   - (Remover "Treinamentos")
-- [ ] **RH / ADMINISTRATIVO** (Fusão de Administrativo e Trabalhista)
+- [x] **RH / ADMINISTRATIVO** (Fusão de Administrativo e Trabalhista)
   - Contratos
   - Procurações
   - Documentos Funcionários
   - Prestadores (Adicionar este novo item)
-- [ ] **FISCAL / CONTÁBIL**
+- [x] **FISCAL / CONTÁBIL**
   - Certidões
   - Débitos
   - Balancetes
