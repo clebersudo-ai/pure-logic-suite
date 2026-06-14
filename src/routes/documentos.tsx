@@ -791,12 +791,12 @@ function DocumentosPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-destructive hover:text-destructive"
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                           onClick={(e) => { e.stopPropagation(); removerDocumento(doc); }}
                           title="Excluir documento"
                           aria-label={`Excluir documento ${doc.nome}`}
                         >
-                          <Trash2 className="h-4 w-4" /> Excluir
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                     </div>
@@ -1489,10 +1489,12 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="h-8 w-8 border-destructive/40 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => onRemove(doc)}
+                title="Excluir documento"
+                aria-label={`Excluir documento ${doc.nome}`}
               >
-                <Trash2 className="h-4 w-4" /> Excluir documento
+                <Trash2 className="h-4 w-4" />
               </Button>
             )}
             <Button size="sm" variant="outline" disabled={!versaoAtual} onClick={() => versaoAtual && openFile(versaoAtual.storage_path, true)}>
