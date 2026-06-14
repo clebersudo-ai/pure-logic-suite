@@ -368,6 +368,7 @@ function DocumentosPage() {
   const isAdmin = hasRole("administrador");
   const canEdit = isAdmin || hasRole("comercial");
   const [docs, setDocs] = useState<Documento[]>([]);
+  const [demandas, setDemandas] = useState<DocumentoDemanda[]>([]);
   const [options, setOptions] = useState<DocumentoOpcao[]>([]);
   const [allowedCategorias, setAllowedCategorias] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -403,9 +404,14 @@ function DocumentosPage() {
   async function load() {
     setLoading(true);
     const shouldLoadAccess = !!user && !isAdmin;
-    const [docsRes, optsRes, accessRes] = await Promise.all([
+    const [docsRes, optsRes, demandasRes, accessRes] = await Promise.all([
       supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
       supabase.from("documento_opcoes").select("*").order("valor", { ascending: true }),
+      supabase
+        .from("documento_demandas")
+        .select("*")
+        .in("status", ["aberta", "em_andamento"])
+        .order("data_limite", { ascending: true, nullsFirst: false }),
       shouldLoadAccess
         ? supabase.from("user_documento_categorias").select("categoria").eq("user_id", user.id)
         : Promise.resolve({ data: null, error: null }),
@@ -413,6 +419,7 @@ function DocumentosPage() {
 
     setDocs((docsRes.data as any as Documento[]) ?? []);
     setOptions((optsRes.data as DocumentoOpcao[]) ?? []);
+    setDemandas((demandasRes.data as any as DocumentoDemanda[]) ?? []);
     setAllowedCategorias(isAdmin ? null : ((accessRes.data as Array<{ categoria: string }> | null) ?? []).map(item => item.categoria));
     setLoading(false);
   }
@@ -521,16 +528,39 @@ function DocumentosPage() {
   }, [docs]);
 
   const porVencimento = useMemo(() => {
-    return enriched
+    const docsPermitidos = new Map(docs.map(doc => [doc.id, doc]));
+    const itensDocumento = enriched
       .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && doc.status !== "arquivado")
       .map(({ doc, dias }) => ({
-        name: doc.nome,
-        dias: Math.max(dias ?? 0, 0),
+        name: doc.nome.length > 26 ? `${doc.nome.slice(0, 25)}...` : doc.nome,
+        originalName: doc.nome,
+        tipo: "Documento",
+        dias: dias ?? 0,
+        diasGrafico: Math.max(Math.abs(dias ?? 0), 1),
+        statusLabel: (dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)}d` : `Vence em ${dias}d`,
         prioridade: dias ?? 999999,
-      }))
+      }));
+    const itensDemandas = demandas
+      .filter(demanda => demanda.data_limite && demanda.status !== "concluida" && docsPermitidos.has(demanda.documento_id))
+      .map(demanda => {
+        const dias = diasAteData(demanda.data_limite) ?? 999999;
+        const nomeDocumento = docsPermitidos.get(demanda.documento_id)?.nome;
+        const titulo = demanda.titulo || nomeDocumento || "Tarefa";
+        return {
+          name: titulo.length > 26 ? `${titulo.slice(0, 25)}...` : titulo,
+          originalName: titulo,
+          tipo: "Tarefa",
+          dias,
+          diasGrafico: Math.max(Math.abs(dias), 1),
+          statusLabel: dias < 0 ? `Vencida há ${Math.abs(dias)}d` : `Vence em ${dias}d`,
+          prioridade: dias,
+        };
+      });
+
+    return [...itensDocumento, ...itensDemandas]
       .sort((a, b) => a.prioridade - b.prioridade)
-      .slice(0, 8);
-  }, [enriched]);
+      .slice(0, 10);
+  }, [docs, demandas, enriched]);
 
   function limparFiltros() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
@@ -621,25 +651,46 @@ function DocumentosPage() {
           <div className="border-b border-sky-100 bg-sky-50/70 p-4 text-center">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documentos por vencimento</h3>
           </div>
-          <div className="h-64 p-4">
+          <div className="h-80 p-4">
             {porVencimento.length === 0 ? <EmptyState label="Sem dados" /> : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={porVencimento} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 18 }}>
-                  <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    type="number"
-                    dataKey="dias"
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                    label={{ value: "dia", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  />
-                  <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="dias" radius={[0, 4, 4, 0]}>
-                    {porVencimento.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="flex h-full flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {porVencimento.slice(0, 4).map(item => (
+                    <Badge
+                      key={`${item.tipo}-${item.originalName}-${item.prioridade}`}
+                      variant="outline"
+                      className={item.dias < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}
+                    >
+                      {item.tipo}: {item.statusLabel}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="min-h-0 flex-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={porVencimento} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 18 }}>
+                      <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        type="number"
+                        dataKey="diasGrafico"
+                        allowDecimals={false}
+                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        label={{ value: "dias", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                      <Tooltip
+                        formatter={(_, __, props: any) => [props.payload.statusLabel, props.payload.tipo]}
+                        labelFormatter={(_, payload) => payload?.[0]?.payload?.originalName ?? ""}
+                        contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                      />
+                      <Bar dataKey="diasGrafico" radius={[0, 4, 4, 0]}>
+                        {porVencimento.map((item, i) => (
+                          <Cell key={i} fill={item.dias < 0 ? "#dc2626" : CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             )}
           </div>
         </DataCard>
