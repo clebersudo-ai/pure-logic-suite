@@ -851,6 +851,7 @@ function DocumentosPage() {
           onClose={() => setSelected(null)}
           onChanged={async () => { await load(); }}
           onEdit={(doc) => { setEditing(doc); setFormOpen(true); }}
+          onRemove={removerDocumento}
         />
       )}
     </div>
@@ -1263,9 +1264,10 @@ function SimpleCombo({ value, setValue, options, placeholder }: {
   );
 }
 
-function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
+function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRemove }: {
   documento: Documento; canEdit: boolean; onClose: () => void; onChanged: () => Promise<void>;
   onEdit: (doc: Documento) => void;
+  onRemove: (doc: Documento) => Promise<void>;
 }) {
   const { user } = useAuth();
   const [doc, setDoc] = useState(documento);
@@ -1482,6 +1484,17 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit }: {
             <Button size="sm" disabled={!versaoAtual} onClick={() => versaoAtual && previewFile(versaoAtual)}>
               <Eye className="h-4 w-4" /> Pré-visualizar
             </Button>
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => onRemove(doc)}
+              >
+                <Trash2 className="h-4 w-4" /> Excluir documento
+              </Button>
+            )}
             <Button size="sm" variant="outline" disabled={!versaoAtual} onClick={() => versaoAtual && openFile(versaoAtual.storage_path, true)}>
               <Download className="h-4 w-4" /> Baixar atual
             </Button>
