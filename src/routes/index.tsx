@@ -137,7 +137,7 @@ function Dashboard() {
 
 
   return (
-    <div className="-m-4 min-h-[calc(100vh-4rem)] space-y-6 p-4 lg:-m-6 lg:p-6">
+    <div className="-m-4 min-h-[calc(100vh-4rem)] space-y-6 bg-[#39ff14] p-4 text-slate-950 lg:-m-6 lg:p-6">
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Painel Operacional</div>
         <h1 className="mt-1 text-2xl font-bold">Visão Geral da Produção</h1>

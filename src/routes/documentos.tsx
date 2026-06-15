@@ -614,7 +614,7 @@ function DocumentosPage() {
   const enriched = useMemo(
     () => docs.map(d => {
       const termos = ["protocolo", "comprovante", "recibo", "protocolado"];
-      const nomeContemTermo = (nome: string) => termos.some(t => nome.toLowerCase().includes(t));
+      const nomeContemTermo = (nome: string | null | undefined) => nome ? termos.some(t => nome.toLowerCase().includes(t)) : false;
       const nasVersoes = versoesList.some(v => v.documento_id === d.id && nomeContemTermo(v.nome_arquivo));
       const nosAnexos = anexosList.some(a => a.documento_id === d.id && nomeContemTermo(a.nome_arquivo));
       const hasProtocolo = nasVersoes || nosAnexos;
@@ -1761,7 +1761,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
 
   const versaoAtual = versoes.find(v => v.versao === doc.versao_atual) ?? versoes[0];
   const termos = ["protocolo", "comprovante", "recibo", "protocolado"];
-  const nomeContemTermo = (nome: string) => termos.some(t => nome.toLowerCase().includes(t));
+  const nomeContemTermo = (nome: string | null | undefined) => nome ? termos.some(t => nome.toLowerCase().includes(t)) : false;
   const hasProtocolo = versoes.some(v => nomeContemTermo(v.nome_arquivo)) || anexos.some(a => nomeContemTermo(a.nome_arquivo));
   const situacao = situacaoFrom(doc, hasProtocolo);
   const meta = SITUACAO_META[situacao];
