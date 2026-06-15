@@ -58,13 +58,17 @@ export function syncRuntimeEnv(env: unknown) {
 
 export function getSupabasePublicEnv() {
   return {
-    url: readEnv("SUPABASE_URL", "VITE_SUPABASE_URL"),
-    publishableKey: readEnv(
-      "SUPABASE_PUBLISHABLE_KEY",
-      "VITE_SUPABASE_PUBLISHABLE_KEY",
-      "SUPABASE_ANON_KEY",
-      "VITE_SUPABASE_ANON_KEY",
-    ),
+    // Production is pinned to the migrated database even when Lovable injects
+    // stale variables from the previously connected Supabase project.
+    url: LOVABLE_CLOUD_PUBLIC_ENV.SUPABASE_URL
+      ?? readEnv("SUPABASE_URL", "VITE_SUPABASE_URL"),
+    publishableKey: LOVABLE_CLOUD_PUBLIC_ENV.SUPABASE_PUBLISHABLE_KEY
+      ?? readEnv(
+        "SUPABASE_PUBLISHABLE_KEY",
+        "VITE_SUPABASE_PUBLISHABLE_KEY",
+        "SUPABASE_ANON_KEY",
+        "VITE_SUPABASE_ANON_KEY",
+      ),
   };
 }
 
