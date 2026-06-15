@@ -23,6 +23,7 @@ import {
   RotateCw, ShieldCheck, AlertTriangle, AlertOctagon, Clock,
   Building2, Filter, X, CalendarClock, Pencil, Sparkles, Loader2,
   ScanLine, CheckCircle2, FileSearch, Settings, ClipboardList, ListTodo,
+  Hourglass, CircleX,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
@@ -95,11 +96,42 @@ const DEFAULT_RESPONSAVEIS = [
 ];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
-  { value: "em_renovacao", label: "Processo de renovação" },
-  { value: "inativo_temporario", label: "Inativo temporário" },
-  { value: "inativo_definitivo", label: "Inativo definitivo" },
+  { value: "renovacao_iniciada", label: "Renovação iniciada" },
+  { value: "protocolo_enviado", label: "Protocolo enviado" },
+  { value: "em_analise_orgao", label: "Em análise pelo órgão" },
+  { value: "exigencia_pendente", label: "Exigência pendente" },
+  { value: "aguardando_nova_licenca", label: "Aguardando nova licença" },
+  { value: "licenca_renovada", label: "Licença renovada" },
+  { value: "indeferido", label: "Indeferido" },
+  { value: "suspenso", label: "Suspenso" },
+  { value: "inativo", label: "Inativo" },
   { value: "arquivado", label: "Arquivado" },
 ];
+const RENEWAL_PHASE_STATUS = [
+  "renovacao_iniciada",
+  "protocolo_enviado",
+  "em_analise_orgao",
+  "exigencia_pendente",
+  "aguardando_nova_licenca",
+  "licenca_renovada",
+  "indeferido",
+  "suspenso",
+  "em_renovacao",
+];
+const RENEWAL_PROCESS_STATUS = [
+  "renovacao_iniciada",
+  "protocolo_enviado",
+  "em_analise_orgao",
+  "exigencia_pendente",
+  "aguardando_nova_licenca",
+  "em_renovacao",
+];
+const INACTIVE_STATUS = ["inativo", "inativo_temporario", "inativo_definitivo"];
+const NOT_MONITORED_STATUS = ["arquivado", ...INACTIVE_STATUS, "indeferido", "suspenso"];
+const isRenewalPhase = (status: string) => RENEWAL_PHASE_STATUS.includes(status);
+const isRenewalProcess = (status: string) => RENEWAL_PROCESS_STATUS.includes(status);
+const isInactiveStatus = (status: string) => INACTIVE_STATUS.includes(status);
+const isNotMonitoredStatus = (status: string) => NOT_MONITORED_STATUS.includes(status);
 const DEFAULT_VENCIMENTO_OPTIONS: OptionItem[] = [
   { value: "vencido", label: "Já vencidos" },
   { value: "30", label: "Em 30 dias" },
@@ -147,14 +179,22 @@ type DocumentoDemanda = {
   created_at: string; updated_at: string; concluida_em: string | null;
 };
 
-type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado" | "inativo" | "renovacao_com_protocolo" | "renovacao_sem_protocolo";
+type Situacao =
+  | "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado" | "inativo"
+  | "renovacao_iniciada" | "protocolo_enviado" | "em_analise_orgao" | "exigencia_pendente"
+  | "aguardando_nova_licenca" | "licenca_renovada" | "indeferido" | "suspenso";
 
 function situacaoFrom(d: Documento, hasProtocolo: boolean): Situacao {
   if (d.status === "arquivado") return "arquivado";
-  if (d.status === "inativo_temporario" || d.status === "inativo_definitivo") return "inativo";
-  if (d.status === "em_renovacao") {
-    return hasProtocolo ? "renovacao_com_protocolo" : "renovacao_sem_protocolo";
-  }
+  if (isInactiveStatus(d.status)) return "inativo";
+  if (d.status === "renovacao_iniciada" || d.status === "em_renovacao") return hasProtocolo ? "protocolo_enviado" : "renovacao_iniciada";
+  if (d.status === "protocolo_enviado") return "protocolo_enviado";
+  if (d.status === "em_analise_orgao") return "em_analise_orgao";
+  if (d.status === "exigencia_pendente") return "exigencia_pendente";
+  if (d.status === "aguardando_nova_licenca") return "aguardando_nova_licenca";
+  if (d.status === "licenca_renovada") return "licenca_renovada";
+  if (d.status === "indeferido") return "indeferido";
+  if (d.status === "suspenso") return "suspenso";
   if (!d.data_validade) return "sem_validade";
   if (!d.renovacao_obrigatoria) return "ativo";
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -174,8 +214,14 @@ const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof
   sem_validade: { label: "Sem validade", cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   arquivado:    { label: "Arquivado",    cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   inativo:      { label: "Inativo",      cls: "bg-zinc-500/15 text-zinc-600 border-zinc-500/30",           icon: FileText },
-  renovacao_com_protocolo: { label: "Processo de renovação (protocolado)", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
-  renovacao_sem_protocolo: { label: "Processo de renovação (sem protocolo)", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: AlertTriangle },
+  renovacao_iniciada: { label: "Renovação iniciada", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: RotateCw },
+  protocolo_enviado: { label: "Protocolo enviado", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
+  em_analise_orgao: { label: "Em análise pelo órgão", cls: "bg-sky-500/15 text-sky-600 border-sky-500/30", icon: Search },
+  exigencia_pendente: { label: "Exigência pendente", cls: "bg-orange-500/15 text-orange-600 border-orange-500/30", icon: AlertTriangle },
+  aguardando_nova_licenca: { label: "Aguardando nova licença", cls: "bg-violet-500/15 text-violet-600 border-violet-500/30", icon: Hourglass },
+  licenca_renovada: { label: "Licença renovada", cls: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30", icon: ShieldCheck },
+  indeferido: { label: "Indeferido", cls: "bg-red-500/15 text-red-600 border-red-500/30", icon: AlertOctagon },
+  suspenso: { label: "Suspenso", cls: "bg-zinc-500/15 text-zinc-600 border-zinc-500/30", icon: CircleX },
 };
 
 function diasAteVencer(d: Documento): number | null {
@@ -438,6 +484,11 @@ function optionTextItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fa
 
 function optionValueItems(options: DocumentoOpcao[], tipo: DocumentoOpcaoTipo, fallback: OptionItem[]) {
   const saved = options.filter(o => o.tipo === tipo).map(toOptionItem);
+  if (tipo === "status") {
+    const removed = new Set(["em_renovacao", "inativo_temporario", "inativo_definitivo"]);
+    const merged = [...fallback, ...saved.filter(o => !removed.has(o.value))];
+    return Array.from(new Map(merged.map(o => [o.value, o])).values());
+  }
   return saved.length > 0 ? saved : fallback;
 }
 
@@ -676,7 +727,7 @@ function DocumentosPage() {
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
     for (const { doc, situacao } of enriched) {
-      if (doc.status === "em_renovacao") s.em_renovacao++;
+      if (isRenewalProcess(doc.status)) s.em_renovacao++;
       if (situacao === "ativo") s.ativos++;
       else if (situacao === "atencao") s.atencao++;
       else if (situacao === "critico") s.critico++;
@@ -694,7 +745,7 @@ function DocumentosPage() {
   const porVencimento = useMemo(() => {
     const docsPermitidos = new Map(docs.map(doc => [doc.id, doc]));
     const itensDocumento = enriched
-      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !["arquivado", "inativo_temporario", "inativo_definitivo"].includes(doc.status))
+      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !isNotMonitoredStatus(doc.status))
       .map(({ doc, dias }) => ({
         name: doc.nome.length > 26 ? `${doc.nome.slice(0, 25)}...` : doc.nome,
         originalName: doc.nome,
@@ -764,7 +815,7 @@ function DocumentosPage() {
 
   const vitaisAlertas = useMemo(() => {
     return enriched.filter(({ doc, dias }) => {
-      if (["arquivado", "inativo_temporario", "inativo_definitivo"].includes(doc.status)) return false;
+      if (isNotMonitoredStatus(doc.status)) return false;
       const orgao = (doc.orgao_emissor ?? "").toLowerCase();
       const subcat = (doc.subcategoria ?? "").toLowerCase();
       const isVitalOrgao = ["anvisa", "cetesb", "policia federal", "policia civil", "exército", "exercito"].some(o => orgao.includes(o) || subcat.includes(o));
@@ -1863,7 +1914,7 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
         </div>
 
         <div className="space-y-4 p-5">
-          {doc.status === "em_renovacao" && (
+          {isRenewalProcess(doc.status) && (
             hasProtocolo ? (
               <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/75 p-3 text-sm text-blue-700">
                 <Clock className="h-4 w-4 shrink-0 text-blue-500" />
@@ -2227,7 +2278,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         docId = matchedDocument.id;
         novaVersao = (matchedDocument.versao_atual ?? 0) + 1;
         const payload = {
-          status: "em_renovacao",
+          status: "protocolo_enviado",
           observacoes: f.observacoes || matchedDocument.observacoes || null,
           validado_ia: true,
           validado_em: new Date().toISOString(),
@@ -2254,7 +2305,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         });
         if (insV.error) throw insV.error;
 
-        toast.success(`Protocolo salvo como versao v${novaVersao} e status alterado para 'Processo de renovacao'`);
+        toast.success(`Protocolo salvo como versao v${novaVersao} e status alterado para 'Protocolo enviado'`);
       } else if (replaceMode && matchedDocument) {
         // Fluxo de Licença Definitiva para documento existente (substituição de versão)
         docId = matchedDocument.id;
@@ -2284,7 +2335,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           validado_ia: true,
           validado_em: new Date().toISOString(),
           versao_atual: novaVersao,
-          status: "ativo",
+          status: "licenca_renovada",
         };
         const { error } = await updateDocumentoPayload(docId, payload);
         if (error) throw error;
@@ -2308,7 +2359,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         });
         if (insV.error) throw insV.error;
 
-        toast.success(`Documento existente atualizado para v${novaVersao} (Licença ativa)`);
+        toast.success(`Documento existente atualizado para v${novaVersao} (Licença renovada)`);
       } else {
         // Documento novo (sem duplicate)
         novaVersao = 1;
@@ -2552,9 +2603,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2 text-xs">
                   <CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-blue-600" />
                   {f.tipo_upload === "protocolo" ? (
-                    <span>O arquivo será salvo como versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> e o status alterado para <b>Processo de renovação</b>.</span>
+                    <span>O arquivo será salvo como versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> e o status alterado para <b>Protocolo enviado</b>.</span>
                   ) : (
-                    <span>Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> (ativo).</span>
+                    <span>Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> com status <b>Licença renovada</b>.</span>
                   )}
                 </div>
               )}
@@ -2852,7 +2903,7 @@ function findDuplicate(docs: Documento[], f: {
   const categoria = normalizeDocText(f.categoria);
   const subcategoria = normalizeDocText(f.subcategoria);
   const candidatos = f.tipo_upload === "protocolo"
-    ? docs.filter(d => !["arquivado", "inativo_definitivo"].includes(d.status))
+    ? docs.filter(d => !isNotMonitoredStatus(d.status))
     : docs;
 
   for (const d of candidatos) {
