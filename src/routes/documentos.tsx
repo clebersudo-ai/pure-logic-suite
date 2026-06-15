@@ -69,6 +69,7 @@ const CATEGORIAS_TREE: Record<string, string[]> = {
   ],
   "QUALIDADE": [
     "POP", "IT", "Manual da Qualidade", "Registros CQ",
+
     "FISPQ", "Boletins Técnicos",
   ],
   "RH / ADMINISTRATIVO": [
@@ -81,6 +82,17 @@ const CATEGORIAS_TREE: Record<string, string[]> = {
 const CATEGORIAS_PRINCIPAIS = Object.keys(CATEGORIAS_TREE);
 const DEFAULT_CATEGORIAS = CATEGORIAS_PRINCIPAIS;
 const DEFAULT_ORGAOS = ["Policia Civil", "Policia Federal", "Exército", "Anvisa", "Vigilância Sanitária", "IBAMA", "Corpo de Bombeiro", "VRE / SIL", "Cetesb", "CADRI", "Prefeitura", "Outros"];
+const DEFAULT_RESPONSAVEIS = [
+  "Contador",
+  "Consultoria Ambiental",
+  "Químico Responsável",
+  "Recursos Humanos (RH)",
+  "Diretoria",
+  "Administrativo",
+  "Jurídico",
+  "Qualidade",
+  "Segurança do Trabalho",
+];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
   { value: "em_renovacao", label: "Em renovação" },
@@ -99,6 +111,13 @@ const CRITICIDADES = [
   { value: "alta", label: "Alta" },
   { value: "critica", label: "Crítica" },
 ];
+
+const CRITICIDADE_CLASSES: Record<string, string> = {
+  baixa: "bg-blue-50 text-blue-700 border-blue-200",
+  media: "bg-slate-50 text-slate-700 border-slate-200",
+  alta: "bg-orange-50 text-orange-700 border-orange-200",
+  critica: "bg-red-50 text-red-700 border-red-200 animate-pulse font-bold",
+};
 
 type Documento = {
   id: string; nome: string; descricao: string | null; categoria: string | null;
@@ -126,11 +145,13 @@ type DocumentoDemanda = {
   created_at: string; updated_at: string; concluida_em: string | null;
 };
 
-type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado";
+type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado" | "renovacao_com_protocolo" | "renovacao_sem_protocolo";
 
-function situacaoFrom(d: Documento): Situacao {
+function situacaoFrom(d: Documento, hasProtocolo: boolean): Situacao {
   if (d.status === "arquivado") return "arquivado";
-  if (d.status === "em_renovacao") return "atencao";
+  if (d.status === "em_renovacao") {
+    return hasProtocolo ? "renovacao_com_protocolo" : "renovacao_sem_protocolo";
+  }
   if (!d.data_validade) return "sem_validade";
   if (!d.renovacao_obrigatoria) return "ativo";
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -149,6 +170,8 @@ const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof
   vencido:      { label: "Vencido",      cls: "bg-red-500/15 text-red-600 border-red-500/30",             icon: AlertOctagon },
   sem_validade: { label: "Sem validade", cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   arquivado:    { label: "Arquivado",    cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
+  renovacao_com_protocolo: { label: "Em renovação (protocolado)", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
+  renovacao_sem_protocolo: { label: "Em renovação (sem protocolo)", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: AlertTriangle },
 };
 
 function diasAteVencer(d: Documento): number | null {
@@ -189,7 +212,7 @@ function fmtIntervalo(dias: number | null) {
   return `${dias} dia${dias === 1 ? "" : "s"}`;
 }
 
-type RecorrenciaTipo = "diaria" | "quinzenal" | "mensal";
+type RecorrenciaTipo = "diaria" | "quinzenal" | "mensal" | "bimestral" | "trimestral" | "semestral" | "anual";
 type RecorrenciaMensalModo = "dia_fixo" | "data_cadastro";
 type ValidadeIndeterminadaState = {
   validade_indeterminada: boolean;
@@ -251,12 +274,6 @@ function fixedMonthDate(year: number, month: number, day: number) {
   return new Date(year, month, Math.min(day, lastDayOfMonth(year, month)));
 }
 
-function nextFixedMonthDay(after: Date, day: number) {
-  let candidate = fixedMonthDate(after.getFullYear(), after.getMonth(), day);
-  if (candidate <= after) candidate = fixedMonthDate(after.getFullYear(), after.getMonth() + 1, day);
-  return candidate;
-}
-
 function nextQuinzenalDay(after: Date, baseDay: number) {
   const days = [baseDay, baseDay + 15].sort((a, b) => a - b);
   for (const day of days) {
@@ -266,24 +283,49 @@ function nextQuinzenalDay(after: Date, baseDay: number) {
   return fixedMonthDate(after.getFullYear(), after.getMonth() + 1, days[0]);
 }
 
-function nextThirtyDayCycle(after: Date, createdAt?: string | null) {
-  let candidate = parseLocalDate(createdAt) ?? new Date();
-  candidate.setHours(0, 0, 0, 0);
-  while (candidate <= after) candidate = addDays(candidate, 30);
-  return candidate;
-}
-
 function nextRecurrenceDateAfter(after: Date, config: {
   tipo?: string | null;
   diaBase?: number | null;
   mensalModo?: string | null;
   createdAt?: string | null;
 }) {
-  const tipo = (config.tipo || "mensal") as RecorrenciaTipo;
+  const tipo = config.tipo || "mensal";
   if (tipo === "diaria") return addDays(after, 1);
   if (tipo === "quinzenal") return nextQuinzenalDay(after, config.diaBase || 15);
-  if (config.mensalModo === "data_cadastro") return nextThirtyDayCycle(after, config.createdAt);
-  return nextFixedMonthDay(after, config.diaBase || 1);
+
+  let monthsToAdd = 1;
+  if (tipo === "bimestral") monthsToAdd = 2;
+  else if (tipo === "trimestral") monthsToAdd = 3;
+  else if (tipo === "semestral") monthsToAdd = 6;
+  else if (tipo === "anual") monthsToAdd = 12;
+
+  if (config.mensalModo === "data_cadastro") {
+    let diasCiclo = 30;
+    if (tipo === "bimestral") diasCiclo = 60;
+    else if (tipo === "trimestral") diasCiclo = 90;
+    else if (tipo === "semestral") diasCiclo = 180;
+    else if (tipo === "anual") diasCiclo = 365;
+
+    let candidate = parseLocalDate(config.createdAt) ?? new Date();
+    candidate.setHours(0, 0, 0, 0);
+    while (candidate <= after) candidate = addDays(candidate, diasCiclo);
+    return candidate;
+  }
+
+  const dia = config.diaBase || 1;
+  const createdAtDate = parseLocalDate(config.createdAt) ?? new Date();
+  createdAtDate.setHours(0, 0, 0, 0);
+  let v_candidata = fixedMonthDate(createdAtDate.getFullYear(), createdAtDate.getMonth(), dia);
+  while (v_candidata <= after) {
+    let nextMonth = v_candidata.getMonth() + monthsToAdd;
+    let nextYear = v_candidata.getFullYear();
+    if (nextMonth > 11) {
+      nextYear += Math.floor(nextMonth / 12);
+      nextMonth = nextMonth % 12;
+    }
+    v_candidata = fixedMonthDate(nextYear, nextMonth, dia);
+  }
+  return v_candidata;
 }
 
 function recurrenceDates(config: {
@@ -325,9 +367,21 @@ function recorrenciaLabel(d: Pick<Documento, "recorrencia_tipo" | "recorrencia_d
     const dia = d.recorrencia_dia_base || 15;
     return `Quinzenalmente - dias ${dia} e ${dia + 15}`;
   }
-  if (d.recorrencia_tipo === "mensal" && d.recorrencia_mensal_modo === "data_cadastro") return "Mensalmente - 30 dias após o cadastro";
-  if (d.recorrencia_tipo === "mensal") return `Mensalmente - dia ${d.recorrencia_dia_base || 1}`;
-  return "—";
+  let labelTipo = "Mensalmente";
+  if (d.recorrencia_tipo === "bimestral") labelTipo = "Bimestralmente";
+  else if (d.recorrencia_tipo === "trimestral") labelTipo = "Trimestralmente";
+  else if (d.recorrencia_tipo === "semestral") labelTipo = "Semestralmente";
+  else if (d.recorrencia_tipo === "anual") labelTipo = "Anualmente";
+
+  if (d.recorrencia_mensal_modo === "data_cadastro") {
+    let dias = 30;
+    if (d.recorrencia_tipo === "bimestral") dias = 60;
+    else if (d.recorrencia_tipo === "trimestral") dias = 90;
+    else if (d.recorrencia_tipo === "semestral") dias = 180;
+    else if (d.recorrencia_tipo === "anual") dias = 365;
+    return `${labelTipo} - ${dias} dias após o cadastro`;
+  }
+  return `${labelTipo} - dia ${d.recorrencia_dia_base || 1}`;
 }
 
 async function gerarDemandasRecorrentes(documentoId: string, payload: Record<string, any>, createdAt?: string | null) {
@@ -400,50 +454,115 @@ function DocumentosPage() {
   const [fSituacao, setFSituacao] = useState("__all");
   const [fVencimento, setFVencimento] = useState<"__all" | string>("__all");
   const [fRecorrencia, setFRecorrencia] = useState("__all");
+  const [fMinhasDemandas, setFMinhasDemandas] = useState(false);
   const [selected, setSelected] = useState<Documento | null>(null);
   const [editing, setEditing] = useState<Documento | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [versoesList, setVersoesList] = useState<{ documento_id: string; nome_arquivo: string }[]>([]);
+  const [anexosList, setAnexosList] = useState<{ documento_id: string; nome_arquivo: string }[]>([]);
+  const [userProfile, setUserProfile] = useState<{ nome: string; email: string } | null>(null);
+  const [toastNotified, setToastNotified] = useState(false);
 
-  const categorias = useMemo(() => {
-    const all = optionTextItems(options, "categoria", DEFAULT_CATEGORIAS);
-    if (isAdmin || allowedCategorias == null) return all;
-    return all.filter(categoria => allowedCategorias.includes(categoria));
-  }, [options, allowedCategorias, isAdmin]);
-  const orgaos = useMemo(() => optionTextItems(options, "orgao", DEFAULT_ORGAOS), [options]);
-  const responsaveisOpcoes = useMemo(() => optionTextItems(options, "responsavel", []), [options]);
-  const statusOpcoes = useMemo(() => optionValueItems(options, "status", DEFAULT_STATUS_OPTIONS), [options]);
-  const vencimentoOpcoes = useMemo(() => optionValueItems(options, "vencimento", DEFAULT_VENCIMENTO_OPTIONS), [options]);
-  const recorrenciaOpcoes = [
-    { value: "recorrentes", label: "Recorrentes" },
-    { value: "atrasadas", label: "Atualização vencida" },
-    { value: "30", label: "Próximos 30 dias" },
-  ];
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("nome, email").eq("id", user.id).single();
+      if (data) setUserProfile(data);
+    }
+    fetchProfile();
+  }, [user]);
+
+  const isMe = (responsavelStr: string | null) => {
+    if (!responsavelStr) return false;
+    const rep = responsavelStr.toLowerCase();
+    const myEmail = user?.email?.toLowerCase() ?? "";
+    const myName = userProfile?.nome?.toLowerCase() ?? "";
+    return rep === myEmail || rep === myName || myName.includes(rep);
+  };
 
   async function load() {
     setLoading(true);
     const shouldLoadAccess = !!user && !isAdmin;
-    const [docsRes, optsRes, demandasRes, accessRes] = await Promise.all([
+    const [docsRes, optsRes, demandasRes, accessRes, versoesRes, anexosRes] = await Promise.all([
       supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
       supabase.from("documento_opcoes").select("*").order("valor", { ascending: true }),
-      supabase
-        .from("documento_demandas")
-        .select("*")
-        .in("status", ["aberta", "em_andamento"])
-        .order("data_limite", { ascending: true, nullsFirst: false }),
+      supabase.from("documento_demandas").select("*").in("status", ["aberta", "em_andamento"]).order("data_limite", { ascending: true, nullsFirst: false }),
       shouldLoadAccess
         ? supabase.from("user_documento_categorias").select("categoria").eq("user_id", user.id)
         : Promise.resolve({ data: null, error: null }),
+      supabase.from("documento_versoes").select("documento_id, nome_arquivo"),
+      supabase.from("documento_anexos").select("documento_id, nome_arquivo"),
     ]);
 
-    setDocs((docsRes.data as any as Documento[]) ?? []);
-    setOptions((optsRes.data as DocumentoOpcao[]) ?? []);
-    setDemandas((demandasRes.data as any as DocumentoDemanda[]) ?? []);
+    const docsData = (docsRes.data as any as Documento[]) ?? [];
+    const optsData = (optsRes.data as DocumentoOpcao[]) ?? [];
+    const demandasData = (demandasRes.data as any as DocumentoDemanda[]) ?? [];
+
+    setDocs(docsData);
+    setOptions(optsData);
+    setDemandas(demandasData);
     setAllowedCategorias(isAdmin ? null : ((accessRes.data as Array<{ categoria: string }> | null) ?? []).map(item => item.categoria));
+    setVersoesList((versoesRes.data as any) ?? []);
+    setAnexosList((anexosRes.data as any) ?? []);
     setLoading(false);
   }
-  useEffect(() => { load(); }, [user?.id, isAdmin]);
+
+  useEffect(() => {
+    if (!loading && demandas.length > 0 && userProfile && !toastNotified) {
+      const minhasDemandasPendentes = demandas.filter(d => d.status !== "concluida" && isMe(d.responsavel));
+      if (minhasDemandasPendentes.length > 0) {
+        toast.warning(`Você possui ${minhasDemandasPendentes.length} demanda(s) pendente(s) sob sua responsabilidade.`, {
+          duration: 6000,
+          action: {
+            label: "Filtrar",
+            onClick: () => setFMinhasDemandas(true)
+          }
+        });
+      }
+      setToastNotified(true);
+    }
+  }, [loading, demandas, userProfile, toastNotified]);
+
+  async function removerDocumento(doc: Documento) {
+    if (!canEdit) return;
+    const ok = confirm(`Excluir o documento "${doc.nome}"? Esta ação também removerá versões, anexos e demandas vinculadas.`);
+    if (!ok) return;
+
+    const [versoesRes, anexosRes] = await Promise.all([
+      supabase.from("documento_versoes").select("storage_path").eq("documento_id", doc.id),
+      supabase.from("documento_anexos").select("storage_path").eq("documento_id", doc.id),
+    ]);
+
+    if (versoesRes.error) { toast.error(versoesRes.error.message); return; }
+    if (anexosRes.error) { toast.error(anexosRes.error.message); return; }
+
+    const storagePaths = [
+      ...((versoesRes.data ?? []) as Array<{ storage_path: string }>),
+      ...((anexosRes.data ?? []) as Array<{ storage_path: string }>),
+    ].map(item => item.storage_path).filter(Boolean);
+
+    if (storagePaths.length > 0) {
+      const { error } = await supabase.storage.from(BUCKET).remove(storagePaths);
+      if (error) { toast.error(error.message); return; }
+    }
+
+    const deletes = [
+      await supabase.from("documento_demandas").delete().eq("documento_id", doc.id),
+      await supabase.from("documento_anexos").delete().eq("documento_id", doc.id),
+      await supabase.from("documento_versoes").delete().eq("documento_id", doc.id),
+    ];
+    const deleteError = deletes.find(res => res.error)?.error;
+    if (deleteError) { toast.error(deleteError.message); return; }
+
+    const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
+    if (error) { toast.error(error.message); return; }
+
+    if (selected?.id === doc.id) setSelected(null);
+    toast.success("Documento excluído");
+    await load();
+  }
 
   async function removerDocumento(doc: Documento) {
     if (!canEdit) return;
@@ -493,13 +612,25 @@ function DocumentosPage() {
   );
 
   const enriched = useMemo(
-    () => docs.map(d => ({ doc: d, situacao: situacaoFrom(d), dias: diasAteVencer(d) })),
-    [docs]
+    () => docs.map(d => {
+      const termos = ["protocolo", "comprovante", "recibo", "protocolado"];
+      const nomeContemTermo = (nome: string) => termos.some(t => nome.toLowerCase().includes(t));
+      const nasVersoes = versoesList.some(v => v.documento_id === d.id && nomeContemTermo(v.nome_arquivo));
+      const nosAnexos = anexosList.some(a => a.documento_id === d.id && nomeContemTermo(a.nome_arquivo));
+      const hasProtocolo = nasVersoes || nosAnexos;
+      return { doc: d, situacao: situacaoFrom(d, hasProtocolo), dias: diasAteVencer(d) };
+    }),
+    [docs, versoesList, anexosList]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return enriched.filter(({ doc, situacao, dias }) => {
+      if (fMinhasDemandas) {
+        const isDocResponsavel = isMe(doc.responsavel);
+        const temDemandaMinha = demandas.some(dem => dem.documento_id === doc.id && dem.status !== "concluida" && isMe(dem.responsavel));
+        if (!isDocResponsavel && !temDemandaMinha) return false;
+      }
       if (q) {
         const hay = [doc.nome, doc.categoria, doc.orgao_emissor, doc.numero_documento, doc.empresa, doc.unidade, doc.responsavel, doc.descricao]
           .filter(Boolean).join(" ").toLowerCase();
@@ -527,7 +658,7 @@ function DocumentosPage() {
       }
       return true;
     });
-  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia]);
+  }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia, fMinhasDemandas, demandas]);
 
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
@@ -585,11 +716,11 @@ function DocumentosPage() {
   function limparFiltros() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
     setFResponsavel("__all"); setFSituacao("__all"); setFVencimento("__all"); setFRecorrencia("__all");
+    setFMinhasDemandas(false);
   }
 
-  const hasFilter = search || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia].some(v => v !== "__all");
+  const hasFilter = search || fMinhasDemandas || [fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia].some(v => v !== "__all");
 
-  // contagem por categoria principal (para badges nas abas)
   const countsPorCategoria = useMemo(() => {
     const m = new Map<string, number>();
     for (const d of docs) {
@@ -598,7 +729,6 @@ function DocumentosPage() {
     return m;
   }, [docs]);
 
-  // subcategorias disponíveis para a categoria ativa
   const subcategoriasAtivas = useMemo(() => {
     if (fCategoria === "__all") return [] as string[];
     const fixas = CATEGORIAS_TREE[fCategoria] ?? [];
@@ -618,6 +748,18 @@ function DocumentosPage() {
     }
     return m;
   }, [docs, fCategoria]);
+
+  const vitaisAlertas = useMemo(() => {
+    return enriched.filter(({ doc, dias }) => {
+      if (doc.status === "arquivado") return false;
+      const orgao = (doc.orgao_emissor ?? "").toLowerCase();
+      const subcat = (doc.subcategoria ?? "").toLowerCase();
+      const isVitalOrgao = ["anvisa", "cetesb", "policia federal", "policia civil", "exército", "exercito"].some(o => orgao.includes(o) || subcat.includes(o));
+      const isHighCriticidade = doc.criticidade === "alta" || doc.criticidade === "critica";
+      const expiradoOuProximo = dias != null && dias <= 45;
+      return (isVitalOrgao || isHighCriticidade) && expiradoOuProximo;
+    });
+  }, [enriched]);
 
   return (
     <div className="space-y-6">
@@ -639,6 +781,36 @@ function DocumentosPage() {
         )}
       />
 
+      {vitaisAlertas.length > 0 && (
+        <div className="rounded-xl border border-red-200 bg-red-50/50 p-4 shadow-sm">
+          <div className="flex items-center gap-2 pb-2 text-red-800">
+            <AlertOctagon className="h-5 w-5 animate-pulse text-red-600" />
+            <h3 className="font-semibold text-sm">Atenção: Licenças Vitais e Documentos Críticos Expirados ou Próximos ao Vencimento</h3>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {vitaisAlertas.map(({ doc, dias }) => (
+              <div key={doc.id} className="flex flex-col gap-1 rounded-lg border border-red-100 bg-white p-3 shadow-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-xs text-slate-800 truncate" title={doc.nome}>{doc.nome}</span>
+                  <Badge variant="outline" className={`text-[10px] ${CRITICIDADE_CLASSES[doc.criticidade] || "bg-muted text-muted-foreground"}`}>
+                    {doc.criticidade}
+                  </Badge>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Órgão: {doc.orgao_emissor ?? "—"} · Responsável: {doc.responsavel ?? "—"}
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs">
+                  <span className="font-medium text-slate-700">Validade: {fmtDate(doc.data_validade)}</span>
+                  <span className={`font-bold ${dias != null && dias < 0 ? "text-red-600 animate-pulse" : "text-amber-600"}`}>
+                    {dias != null && dias < 0 ? `Vencido há ${Math.abs(dias)}d` : `Vence em ${dias}d`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard icon={ShieldCheck} label="Ativos" value={stats.ativos} tone="emerald" />
@@ -654,7 +826,7 @@ function DocumentosPage() {
           <div className="border-b border-emerald-100 bg-emerald-50/70 p-4 text-center">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Documentos por categoria</h3>
           </div>
-          <div className="h-64 p-4">
+          <div className="h-80 p-4">
             {porCategoria.length === 0 ? <EmptyState label="Sem dados" /> : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -769,6 +941,15 @@ function DocumentosPage() {
               <Input placeholder="Busca inteligente: nome, número, órgão, empresa, responsável…" className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <Button variant="outline" size="sm" onClick={load}><RotateCw className="h-3.5 w-3.5" /> Atualizar</Button>
+            <Button
+              variant={fMinhasDemandas ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFMinhasDemandas(!fMinhasDemandas)}
+              className={fMinhasDemandas ? "bg-sky-600 hover:bg-sky-700 text-white" : "border-sky-200 text-sky-700 bg-sky-50 hover:bg-sky-100"}
+            >
+              <ClipboardList className="h-3.5 w-3.5 mr-1" />
+              Minhas Demandas {fMinhasDemandas ? "(Ativo)" : ""}
+            </Button>
             {hasFilter && (
               <Button variant="ghost" size="sm" onClick={limparFiltros}><X className="h-3.5 w-3.5" /> Limpar</Button>
             )}
@@ -792,15 +973,16 @@ function DocumentosPage() {
               <TableHead>Empresa / Unidade</TableHead>
               <TableHead>Responsável</TableHead>
               <TableHead>Validade</TableHead>
+              <TableHead>Criticidade</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={8}><EmptyState label="Carregando…" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={9}><EmptyState label="Carregando…" /></TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={9}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
             ) : filtered.map(({ doc, situacao, dias }) => {
               const meta = SITUACAO_META[situacao];
               const Icon = meta.icon;
@@ -843,6 +1025,12 @@ function DocumentosPage() {
                         Próx. atualização: {fmtDate(doc.proxima_atualizacao)}
                       </div>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`gap-1 ${CRITICIDADE_CLASSES[doc.criticidade] || "bg-muted text-muted-foreground"}`}>
+                      {doc.criticidade === "critica" && <AlertOctagon className="h-3 w-3 text-red-600 animate-bounce" />}
+                      {CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`gap-1 ${meta.cls}`}>
@@ -1001,6 +1189,27 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
   useEffect(() => {
     setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s, documento?.created_at) }));
   }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo, documento?.created_at]);
+
+  useEffect(() => {
+    if (f.subcategoria === "MAPA Produtos Controlados" && f.orgao_emissor) {
+      const orgao = f.orgao_emissor;
+      let recorrencia = "";
+      if (orgao === "Policia Federal") {
+        recorrencia = "mensal";
+      } else if (orgao === "Policia Civil" || orgao === "Exército") {
+        recorrencia = "trimestral";
+      }
+      if (recorrencia) {
+        setF(s => ({
+          ...s,
+          atualizacao_recorrente: true,
+          renovacao_obrigatoria: true,
+          recorrencia_tipo: recorrencia,
+          recorrencia_dia_base: "10",
+        }));
+      }
+    }
+  }, [f.subcategoria, f.orgao_emissor]);
   const [saving, setSaving] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiFile, setAiFile] = useState<File | null>(null);
@@ -1179,6 +1388,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
                 placeholder="Selecione a pasta…"
               />
             </div>
+
           </FormField>
           <FormField label="Subcategoria (subpasta)">
             <SimpleCombo
@@ -1188,9 +1398,14 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               placeholder={f.categoria ? "Selecione a subpasta…" : "Escolha a categoria primeiro"}
             />
           </FormField>
-          <FormField label="Órgão emissor">
+          <FormField label={f.subcategoria === "MAPA Produtos Controlados" ? "Órgão Vinculado *" : "Órgão emissor"}>
             <div className={aiCls("orgao_emissor") + " rounded-md"}>
-              <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={orgaos} placeholder="Selecione…" />
+              <SimpleCombo
+                value={f.orgao_emissor}
+                setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))}
+                options={f.subcategoria === "MAPA Produtos Controlados" ? ["Policia Civil", "Policia Federal", "Exército", "CADRI", "Outros"] : orgaos}
+                placeholder="Selecione…"
+              />
             </div>
           </FormField>
           <FormField label="Número do documento">
@@ -1245,6 +1460,10 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
                     <SelectItem value="diaria">Diariamente</SelectItem>
                     <SelectItem value="quinzenal">Quinzenalmente</SelectItem>
                     <SelectItem value="mensal">Mensalmente</SelectItem>
+                    <SelectItem value="bimestral">Bimestralmente</SelectItem>
+                    <SelectItem value="trimestral">Trimestralmente</SelectItem>
+                    <SelectItem value="semestral">Semestralmente</SelectItem>
+                    <SelectItem value="anual">Anualmente</SelectItem>
                   </SelectContent>
                 </Select>
               </FormField>
@@ -1541,7 +1760,10 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
   }
 
   const versaoAtual = versoes.find(v => v.versao === doc.versao_atual) ?? versoes[0];
-  const situacao = situacaoFrom(doc);
+  const termos = ["protocolo", "comprovante", "recibo", "protocolado"];
+  const nomeContemTermo = (nome: string) => termos.some(t => nome.toLowerCase().includes(t));
+  const hasProtocolo = versoes.some(v => nomeContemTermo(v.nome_arquivo)) || anexos.some(a => nomeContemTermo(a.nome_arquivo));
+  const situacao = situacaoFrom(doc, hasProtocolo);
   const meta = SITUACAO_META[situacao];
   const totalBytes = [...versoes, ...anexos].reduce((s, x) => s + (x.tamanho_bytes ?? 0), 0);
 
@@ -1628,6 +1850,23 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
         </div>
 
         <div className="space-y-4 p-5">
+          {doc.status === "em_renovacao" && (
+            hasProtocolo ? (
+              <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/75 p-3 text-sm text-blue-700">
+                <Clock className="h-4 w-4 shrink-0 text-blue-500" />
+                <div>
+                  <span className="font-semibold">📘 Protocolo de Renovação anexado.</span> Regularidade provisória comprovada.
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/75 p-3 text-sm text-amber-700">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 animate-pulse" />
+                <div>
+                  <span className="font-semibold">⚠️ Documento em renovação, mas nenhum comprovante de protocolo foi anexado ainda.</span> Anexe o protocolo para garantir a conformidade.
+                </div>
+              </div>
+            )
+          )}
           {canEdit && (
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -1839,11 +2078,33 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
     validade_indeterminada: false,
     atualizacao_recorrente: false, recorrencia_tipo: "mensal", recorrencia_dia_base: "1", recorrencia_mensal_modo: "dia_fixo", proxima_atualizacao: "",
     criticidade: "media", renovacao_obrigatoria: false,
+    tipo_upload: "licenca" as "licenca" | "protocolo",
   });
 
   useEffect(() => {
     setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s) }));
   }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo]);
+
+  useEffect(() => {
+    if (f.subcategoria === "MAPA Produtos Controlados" && f.orgao_emissor) {
+      const orgao = f.orgao_emissor;
+      let recorrencia = "";
+      if (orgao === "Policia Federal") {
+        recorrencia = "mensal";
+      } else if (orgao === "Policia Civil" || orgao === "Exército") {
+        recorrencia = "trimestral";
+      }
+      if (recorrencia) {
+        setF(s => ({
+          ...s,
+          atualizacao_recorrente: true,
+          renovacao_obrigatoria: true,
+          recorrencia_tipo: recorrencia,
+          recorrencia_dia_base: "10",
+        }));
+      }
+    }
+  }, [f.subcategoria, f.orgao_emissor]);
 
   function pickFile(file: File) {
     if (preview) URL.revokeObjectURL(preview.url);
@@ -1887,7 +2148,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       setProgress(90);
 
       const filled: string[] = [];
-      const next = { ...f };
+      const nomeLower = file.name.toLowerCase();
+      const ehProtocolo = nomeLower.includes("protocolo") || nomeLower.includes("comprovante") || nomeLower.includes("recibo") || nomeLower.includes("protocolado");
+      const next = { ...f, tipo_upload: (ehProtocolo ? "protocolo" : "licenca") as "licenca" | "protocolo" };
       const keys = ["tipo_documento", "nome", "numero_documento", "orgao_emissor", "categoria",
         "data_emissao", "data_validade", "empresa", "cnpj", "uf", "responsavel", "observacoes"] as const;
       for (const k of keys) {
@@ -1905,7 +2168,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       // Dedup check
       const dup = findDuplicate(existing, next);
       setDuplicate(dup);
-      setReplaceMode(false);
+      setReplaceMode(ehProtocolo && dup ? true : false);
 
       setProgress(100);
       setStep("review");
@@ -1934,7 +2197,38 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       let docId: string;
       let novaVersao: number;
 
-      if (replaceMode && duplicate) {
+      if (f.tipo_upload === "protocolo" && duplicate) {
+        // Fluxo de Protocolo de Renovação para documento existente
+        docId = duplicate.id;
+        const payload = {
+          status: "em_renovacao",
+          observacoes: f.observacoes || duplicate.observacoes || null
+        };
+        const { error: updateError } = await updateDocumentoPayload(docId, payload);
+        if (updateError) throw updateError;
+
+        // Upload do arquivo (anexo)
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${docId}/anexo/${Date.now()}_${safe}`;
+        const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+        if (up.error) throw up.error;
+
+        // Inserir em documento_anexos
+        const insA = await supabase.from("documento_anexos").insert({
+          documento_id: docId,
+          storage_path: path,
+          nome_arquivo: file.name,
+          mime_type: file.type,
+          tamanho_bytes: file.size,
+          observacoes: `Protocolo anexado via Upload Inteligente · ${nomeUser}`,
+          enviado_por: userId,
+          enviado_por_nome: nomeUser,
+        });
+        if (insA.error) throw insA.error;
+
+        toast.success(`Protocolo anexado com sucesso e status alterado para 'Em renovação'`);
+      } else if (replaceMode && duplicate) {
+        // Fluxo de Licença Definitiva para documento existente (substituição de versão)
         docId = duplicate.id;
         novaVersao = (duplicate.versao_atual ?? 0) + 1;
         const payload: any = {
@@ -1966,8 +2260,31 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         };
         const { error } = await updateDocumentoPayload(docId, payload);
         if (error) throw error;
+
+        // Upload do arquivo (versao)
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${docId}/versao/${Date.now()}_${safe}`;
+        const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+        if (up.error) throw up.error;
+
+        const insV = await supabase.from("documento_versoes").insert({
+          documento_id: docId,
+          versao: novaVersao,
+          storage_path: path,
+          nome_arquivo: file.name,
+          mime_type: file.type,
+          tamanho_bytes: file.size,
+          observacoes: `Nova versão validada por IA · ${nomeUser}`,
+          enviado_por: userId,
+          enviado_por_nome: nomeUser,
+        });
+        if (insV.error) throw insV.error;
+
+        toast.success(`Documento atualizado para v${novaVersao} (Licença Ativa)`);
       } else {
+        // Documento novo (sem duplicate)
         novaVersao = 1;
+        const statusDestino = f.tipo_upload === "protocolo" ? "em_renovacao" : "ativo";
         const payload: any = {
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
@@ -1990,7 +2307,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
-          status: "ativo",
+          status: statusDestino,
           validado_ia: true,
           validado_em: new Date().toISOString(),
           versao_atual: novaVersao,
@@ -1999,30 +2316,28 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         const { data, error } = await insertDocumentoPayloadReturningId(payload);
         if (error) throw error;
         docId = (data as any).id;
+
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${docId}/versao/${Date.now()}_${safe}`;
+        const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
+        if (up.error) throw up.error;
+
+        const insV = await supabase.from("documento_versoes").insert({
+          documento_id: docId,
+          versao: novaVersao,
+          storage_path: path,
+          nome_arquivo: file.name,
+          mime_type: file.type,
+          tamanho_bytes: file.size,
+          observacoes: f.tipo_upload === "protocolo" ? `Protocolo v${novaVersao} validado por IA · ${nomeUser}` : `Versão v${novaVersao} validada por IA · ${nomeUser}`,
+          enviado_por: userId,
+          enviado_por_nome: nomeUser,
+        });
+        if (insV.error) throw insV.error;
+
+        toast.success(f.tipo_upload === "protocolo" ? "Novo documento criado com status 'Em renovação'" : "Novo documento criado ativo");
       }
 
-      // Upload do arquivo (versionado)
-      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${docId}/versao/${Date.now()}_${safe}`;
-      const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
-      if (up.error) throw up.error;
-
-      const insV = await supabase.from("documento_versoes").insert({
-        documento_id: docId,
-        versao: novaVersao,
-        storage_path: path,
-        nome_arquivo: file.name,
-        mime_type: file.type,
-        tamanho_bytes: file.size,
-        observacoes: `Validado por IA · ${nomeUser}`,
-        enviado_por: userId,
-        enviado_por_nome: nomeUser,
-      });
-      if (insV.error) throw insV.error;
-
-      toast.success(replaceMode
-        ? `Documento atualizado para v${novaVersao} · Validado`
-        : "Documento validado e anexado automaticamente");
       const demandaGerada = await gerarDemandasRecorrentes(docId, {
         nome: f.nome,
         responsavel: f.responsavel || null,
@@ -2154,6 +2469,35 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 </div>
               )}
 
+              <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 bg-muted/20">
+                <div className="col-span-2">
+                  <Label className="text-xs font-semibold">Finalidade do Arquivo</Label>
+                  <p className="text-[11px] text-muted-foreground mb-2">Selecione se está enviando a licença final ativa ou um protocolo de renovação em andamento.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant={f.tipo_upload === "licenca" ? "default" : "outline"}
+                  onClick={() => {
+                    setF(s => ({ ...s, tipo_upload: "licenca" }));
+                    if (duplicate) setReplaceMode(true);
+                  }}
+                  className="w-full gap-2 text-xs h-9"
+                >
+                  <ShieldCheck className="h-4 w-4 text-emerald-500" /> Licença Definitiva
+                </Button>
+                <Button
+                  type="button"
+                  variant={f.tipo_upload === "protocolo" ? "default" : "outline"}
+                  onClick={() => {
+                    setF(s => ({ ...s, tipo_upload: "protocolo" }));
+                    if (duplicate) setReplaceMode(true);
+                  }}
+                  className="w-full gap-2 text-xs h-9"
+                >
+                  <Clock className="h-4 w-4 text-blue-500" /> Protocolo de Renovação
+                </Button>
+              </div>
+
               {duplicate && !replaceMode && (
                 <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
                   <div className="mb-1 flex items-center gap-1 font-semibold text-amber-700 dark:text-amber-400">
@@ -2176,7 +2520,11 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
               {replaceMode && duplicate && (
                 <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2 text-xs">
                   <CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-blue-600" />
-                  Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de "{duplicate.nome}". A versão anterior é preservada no histórico.
+                  {f.tipo_upload === "protocolo" ? (
+                    <span>O arquivo será anexado a <b>{duplicate.nome}</b> e o status alterado para <b>Em renovação</b>.</span>
+                  ) : (
+                    <span>Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> (ativo).</span>
+                  )}
                 </div>
               )}
 
@@ -2210,9 +2558,14 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <FormField label="Número">
                   <Input className={cls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
                 </FormField>
-                <FormField label="Órgão emissor">
+                <FormField label={f.subcategoria === "MAPA Produtos Controlados" ? "Órgão Vinculado *" : "Órgão emissor"}>
                   <div className={cls("orgao_emissor") + " rounded-md"}>
-                    <SimpleCombo value={f.orgao_emissor} setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))} options={orgaos} placeholder="Selecione…" />
+                    <SimpleCombo
+                      value={f.orgao_emissor}
+                      setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))}
+                      options={f.subcategoria === "MAPA Produtos Controlados" ? ["Policia Civil", "Policia Federal", "Exército", "CADRI", "Outros"] : orgaos}
+                      placeholder="Selecione…"
+                    />
                   </div>
                 </FormField>
                 <FormField label="Empresa / Razão social">
@@ -2267,6 +2620,10 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                           <SelectItem value="diaria">Diariamente</SelectItem>
                           <SelectItem value="quinzenal">Quinzenalmente</SelectItem>
                           <SelectItem value="mensal">Mensalmente</SelectItem>
+                          <SelectItem value="bimestral">Bimestralmente</SelectItem>
+                          <SelectItem value="trimestral">Trimestralmente</SelectItem>
+                          <SelectItem value="semestral">Semestralmente</SelectItem>
+                          <SelectItem value="anual">Anualmente</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormField>

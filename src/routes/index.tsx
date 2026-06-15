@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Factory, AlertTriangle, ClipboardList, DollarSign, TrendingUp, TrendingDown, Activity, ShieldAlert, ShieldCheck, ShieldQuestion, FileWarning, CalendarClock, ArrowRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, CartesianGrid, Legend,
@@ -15,6 +17,41 @@ import {
 export const Route = createFileRoute("/")({ component: () => (<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>) });
 
 function Dashboard() {
+  const { user } = useAuth();
+  const [userProfile, setUserProfile] = useState<{ nome: string; email: string } | null>(null);
+
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("nome, email").eq("id", user.id).single();
+      if (data) setUserProfile(data);
+    }
+    fetchProfile();
+  }, [user]);
+
+  const isMe = (responsavelStr: string | null) => {
+    if (!responsavelStr) return false;
+    const rep = responsavelStr.toLowerCase();
+    const myEmail = user?.email?.toLowerCase() ?? "";
+    const myName = userProfile?.nome?.toLowerCase() ?? "";
+    return rep === myEmail || rep === myName || myName.includes(rep);
+  };
+
+  const { data: minhasDemandas, isLoading: isLoadingDemandas } = useQuery({
+    queryKey: ["dashboard-minhas-demandas", userProfile?.nome, user?.email],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("documento_demandas")
+        .select("id, documento_id, titulo, responsavel, data_limite, status, documentos(nome)")
+        .in("status", ["aberta", "em_andamento"])
+        .order("data_limite", { ascending: true, nullsFirst: false });
+      
+      const res = data ?? [];
+      return res.filter((d: any) => isMe(d.responsavel));
+    },
+    enabled: !!userProfile
+  });
+
   const { data: stats, isLoading } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: async () => {
@@ -100,7 +137,7 @@ function Dashboard() {
 
 
   return (
-    <div className="-m-4 min-h-[calc(100vh-4rem)] space-y-6 bg-[#39ff14] p-4 text-slate-950 lg:-m-6 lg:p-6">
+    <div className="-m-4 min-h-[calc(100vh-4rem)] space-y-6 p-4 lg:-m-6 lg:p-6">
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Painel Operacional</div>
         <h1 className="mt-1 text-2xl font-bold">Visão Geral da Produção</h1>
@@ -239,12 +276,12 @@ function Dashboard() {
         </Card>
       </div>
 
-      <RegulatorioPanel reg={reg} />
+      <RegulatorioPanel reg={reg} minhasDemandas={minhasDemandas ?? []} loadingDemandas={isLoadingDemandas} />
     </div>
   );
 }
 
-function RegulatorioPanel({ reg }: { reg: any }) {
+function RegulatorioPanel({ reg, minhasDemandas, loadingDemandas }: { reg: any; minhasDemandas: any[]; loadingDemandas: boolean }) {
   const vencidos = reg?.vencidos ?? [];
   const em30 = reg?.em30 ?? [];
   const em90 = reg?.em90 ?? [];
@@ -272,66 +309,134 @@ function RegulatorioPanel({ reg }: { reg: any }) {
         <AlertCard tone="info" icon={<ShieldQuestion className="h-5 w-5" />} label="Renovação pendente" value={renov.length} hint="obrigatórias em risco" />
       </div>
 
-      <Card className="p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldCheck className="h-4 w-4 text-primary" /> Painel de prioridades regulatórias
-            </h3>
-            <p className="text-xs text-muted-foreground">Documentos ordenados por proximidade do vencimento</p>
-          </div>
-          <Badge variant="outline" className="text-[10px]">
-            {prioridades.length} {prioridades.length === 1 ? "item" : "itens"}
-          </Badge>
-        </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <Card className="p-5 h-full">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4 text-primary" /> Painel de prioridades regulatórias
+                </h3>
+                <p className="text-xs text-muted-foreground">Documentos ordenados por proximidade do vencimento</p>
+              </div>
+              <Badge variant="outline" className="text-[10px]">
+                {prioridades.length} {prioridades.length === 1 ? "item" : "itens"}
+              </Badge>
+            </div>
 
-        {prioridades.length === 0 ? (
-          <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
-            <ShieldCheck className="mx-auto mb-2 h-6 w-6 text-success" />
-            Nenhum documento em janela crítica. Conformidade em dia.
+            {prioridades.length === 0 ? (
+              <div className="rounded-md border border-dashed py-10 text-center text-sm text-muted-foreground">
+                <ShieldCheck className="mx-auto mb-2 h-6 w-6 text-success" />
+                Nenhum documento em janela crítica. Conformidade em dia.
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {prioridades.map((d: any) => {
+                  const tone = d._bucket === "vencido" ? "destructive" : d._bucket === "critico" ? "danger" : "warning";
+                  const label = d._bucket === "vencido"
+                    ? `Vencido há ${Math.abs(d._dias)}d`
+                    : `${d._dias}d restantes`;
+                  const dot = tone === "destructive" ? "bg-destructive" : tone === "danger" ? "bg-destructive/70" : "bg-warning";
+                  return (
+                    <li key={d.id} className="flex items-center gap-3 py-2.5">
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot} ring-2 ring-background`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{d.nome}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          {[d.categoria, d.orgao_emissor, d.responsavel].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge
+                          className={
+                            tone === "destructive"
+                              ? "bg-destructive text-destructive-foreground"
+                              : tone === "danger"
+                              ? "bg-destructive/15 text-destructive border border-destructive/30"
+                              : "bg-warning/20 text-warning-foreground border border-warning/40"
+                          }
+                        >
+                          {label}
+                        </Badge>
+                        {d.renovacao_obrigatoria && (
+                          <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            renovação obrigatória
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
+        <div>
+          <MinhasDemandasCard minhasDemandas={minhasDemandas} loading={loadingDemandas} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MinhasDemandasCard({ minhasDemandas, loading }: { minhasDemandas: any[]; loading: boolean }) {
+  const fmtDate = (s: string | null) => {
+    if (!s) return "—";
+    return new Date(s + "T00:00:00").toLocaleDateString("pt-BR");
+  };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const diasAteData = (data: string | null) => {
+    if (!data) return null;
+    const alvo = new Date(data + "T00:00:00");
+    return Math.ceil((alvo.getTime() - hoje.getTime()) / 86400000);
+  };
+
+  return (
+    <Card className="p-5 h-full flex flex-col justify-between">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <ClipboardList className="h-4 w-4 text-primary" /> Minhas Demandas Pendentes
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">Tarefas sob sua responsabilidade aguardando conclusão</p>
+        
+        {loading ? (
+          <div className="space-y-2 py-4">
+            <div className="h-6 w-full animate-pulse rounded bg-muted" />
+            <div className="h-6 w-full animate-pulse rounded bg-muted" />
+          </div>
+        ) : minhasDemandas.length === 0 ? (
+          <div className="rounded-md border border-dashed py-8 text-center text-xs text-muted-foreground flex flex-col items-center justify-center gap-2">
+            <ShieldCheck className="h-8 w-8 text-emerald-500" />
+            Você não possui demandas pendentes no momento.
           </div>
         ) : (
-          <ul className="divide-y">
-            {prioridades.map((d: any) => {
-              const tone = d._bucket === "vencido" ? "destructive" : d._bucket === "critico" ? "danger" : "warning";
-              const label = d._bucket === "vencido"
-                ? `Vencido há ${Math.abs(d._dias)}d`
-                : `${d._dias}d restantes`;
-              const dot = tone === "destructive" ? "bg-destructive" : tone === "danger" ? "bg-destructive/70" : "bg-warning";
+          <ul className="divide-y max-h-[300px] overflow-y-auto pr-1">
+            {minhasDemandas.map((d) => {
+              const dias = diasAteData(d.data_limite);
+              const atrasada = dias != null && dias < 0;
+              const docNome = d.documentos?.nome ?? "Documento";
               return (
-                <li key={d.id} className="flex items-center gap-3 py-2.5">
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot} ring-2 ring-background`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{d.nome}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {[d.categoria, d.orgao_emissor, d.responsavel].filter(Boolean).join(" · ") || "—"}
-                    </div>
+                <li key={d.id} className="py-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-slate-800 truncate" title={d.titulo}>{d.titulo}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{docNome}</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Prazo: {fmtDate(d.data_limite)}</div>
                   </div>
-                  <div className="text-right">
-                    <Badge
-                      className={
-                        tone === "destructive"
-                          ? "bg-destructive text-destructive-foreground"
-                          : tone === "danger"
-                          ? "bg-destructive/15 text-destructive border border-destructive/30"
-                          : "bg-warning/20 text-warning-foreground border border-warning/40"
-                      }
-                    >
-                      {label}
-                    </Badge>
-                    {d.renovacao_obrigatoria && (
-                      <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-                        renovação obrigatória
-                      </div>
-                    )}
-                  </div>
+                  <Badge variant="outline" className={`shrink-0 text-[10px] ${atrasada ? "bg-red-50 text-red-700 border-red-200" : "bg-sky-50 text-sky-700 border-sky-200"}`}>
+                    {dias != null ? (dias < 0 ? `Atrasada ${Math.abs(dias)}d` : `${dias}d rest.`) : "s/ prazo"}
+                  </Badge>
                 </li>
               );
             })}
           </ul>
         )}
-      </Card>
-    </div>
+      </div>
+      <div className="mt-4 pt-2 border-t text-center">
+        <Link to="/documentos" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          Acessar Módulo de Documentos <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+    </Card>
   );
 }
 
