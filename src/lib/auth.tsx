@@ -33,12 +33,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRoles([]);
       }
     });
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) loadRoles(data.session.user.id).finally(() => setLoading(false));
-      else setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(async ({ data, error }) => {
+        if (error) throw error;
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        if (data.session?.user) await loadRoles(data.session.user.id);
+      })
+      .catch((error) => {
+        console.error("[Auth] Falha ao recuperar a sessão:", error);
+        setSession(null);
+        setUser(null);
+        setRoles([]);
+      })
+      .finally(() => setLoading(false));
     return () => subscription.unsubscribe();
   }, []);
 

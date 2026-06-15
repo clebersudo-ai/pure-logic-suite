@@ -484,29 +484,49 @@ function DocumentosPage() {
 
   async function load() {
     setLoading(true);
-    const shouldLoadAccess = !!user && !isAdmin;
-    const [docsRes, optsRes, demandasRes, accessRes, versoesRes, anexosRes] = await Promise.all([
-      supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
-      supabase.from("documento_opcoes").select("*").order("valor", { ascending: true }),
-      supabase.from("documento_demandas").select("*").in("status", ["aberta", "em_andamento"]).order("data_limite", { ascending: true, nullsFirst: false }),
-      shouldLoadAccess
-        ? supabase.from("user_documento_categorias").select("categoria").eq("user_id", user.id)
-        : Promise.resolve({ data: null, error: null }),
-      supabase.from("documento_versoes").select("documento_id, nome_arquivo"),
-      supabase.from("documento_anexos").select("documento_id, nome_arquivo"),
-    ]);
+    try {
+      const shouldLoadAccess = !!user && !isAdmin;
+      const [docsRes, optsRes, demandasRes, accessRes, versoesRes, anexosRes] = await Promise.all([
+        supabase.from("documentos").select("*").order("data_validade", { ascending: true, nullsFirst: false }),
+        supabase.from("documento_opcoes").select("*").order("valor", { ascending: true }),
+        supabase.from("documento_demandas").select("*").in("status", ["aberta", "em_andamento"]).order("data_limite", { ascending: true, nullsFirst: false }),
+        shouldLoadAccess
+          ? supabase.from("user_documento_categorias").select("categoria").eq("user_id", user.id)
+          : Promise.resolve({ data: null, error: null }),
+        supabase.from("documento_versoes").select("documento_id, nome_arquivo"),
+        supabase.from("documento_anexos").select("documento_id, nome_arquivo"),
+      ]);
 
-    const docsData = (docsRes.data as any as Documento[]) ?? [];
-    const optsData = (optsRes.data as DocumentoOpcao[]) ?? [];
-    const demandasData = (demandasRes.data as any as DocumentoDemanda[]) ?? [];
+      const errors = [
+        docsRes.error,
+        optsRes.error,
+        demandasRes.error,
+        accessRes.error,
+        versoesRes.error,
+        anexosRes.error,
+      ].filter(Boolean);
 
-    setDocs(docsData);
-    setOptions(optsData);
-    setDemandas(demandasData);
-    setAllowedCategorias(isAdmin ? null : ((accessRes.data as Array<{ categoria: string }> | null) ?? []).map(item => item.categoria));
-    setVersoesList((versoesRes.data as any) ?? []);
-    setAnexosList((anexosRes.data as any) ?? []);
-    setLoading(false);
+      if (errors.length > 0) {
+        console.error("[Documentos] Falha ao carregar dados:", errors);
+        toast.error(`Não foi possível carregar todos os documentos: ${errors[0]?.message}`);
+      }
+
+      const docsData = (docsRes.data as any as Documento[]) ?? [];
+      const optsData = (optsRes.data as DocumentoOpcao[]) ?? [];
+      const demandasData = (demandasRes.data as any as DocumentoDemanda[]) ?? [];
+
+      setDocs(docsData);
+      setOptions(optsData);
+      setDemandas(demandasData);
+      setAllowedCategorias(isAdmin ? null : ((accessRes.data as Array<{ categoria: string }> | null) ?? []).map(item => item.categoria));
+      setVersoesList((versoesRes.data as any) ?? []);
+      setAnexosList((anexosRes.data as any) ?? []);
+    } catch (error) {
+      console.error("[Documentos] Erro inesperado ao carregar:", error);
+      toast.error("Não foi possível carregar o módulo de documentos. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
