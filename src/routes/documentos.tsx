@@ -510,6 +510,10 @@ function DocumentosPage() {
   }
 
   useEffect(() => {
+    load();
+  }, [user?.id, isAdmin]);
+
+  useEffect(() => {
     if (!loading && demandas.length > 0 && userProfile && !toastNotified) {
       const minhasDemandasPendentes = demandas.filter(d => d.status !== "concluida" && isMe(d.responsavel));
       if (minhasDemandasPendentes.length > 0) {
@@ -524,45 +528,6 @@ function DocumentosPage() {
       setToastNotified(true);
     }
   }, [loading, demandas, userProfile, toastNotified]);
-
-  async function removerDocumento(doc: Documento) {
-    if (!canEdit) return;
-    const ok = confirm(`Excluir o documento "${doc.nome}"? Esta ação também removerá versões, anexos e demandas vinculadas.`);
-    if (!ok) return;
-
-    const [versoesRes, anexosRes] = await Promise.all([
-      supabase.from("documento_versoes").select("storage_path").eq("documento_id", doc.id),
-      supabase.from("documento_anexos").select("storage_path").eq("documento_id", doc.id),
-    ]);
-
-    if (versoesRes.error) { toast.error(versoesRes.error.message); return; }
-    if (anexosRes.error) { toast.error(anexosRes.error.message); return; }
-
-    const storagePaths = [
-      ...((versoesRes.data ?? []) as Array<{ storage_path: string }>),
-      ...((anexosRes.data ?? []) as Array<{ storage_path: string }>),
-    ].map(item => item.storage_path).filter(Boolean);
-
-    if (storagePaths.length > 0) {
-      const { error } = await supabase.storage.from(BUCKET).remove(storagePaths);
-      if (error) { toast.error(error.message); return; }
-    }
-
-    const deletes = [
-      await supabase.from("documento_demandas").delete().eq("documento_id", doc.id),
-      await supabase.from("documento_anexos").delete().eq("documento_id", doc.id),
-      await supabase.from("documento_versoes").delete().eq("documento_id", doc.id),
-    ];
-    const deleteError = deletes.find(res => res.error)?.error;
-    if (deleteError) { toast.error(deleteError.message); return; }
-
-    const { error } = await supabase.from("documentos").delete().eq("id", doc.id);
-    if (error) { toast.error(error.message); return; }
-
-    if (selected?.id === doc.id) setSelected(null);
-    toast.success("Documento excluído");
-    await load();
-  }
 
   async function removerDocumento(doc: Documento) {
     if (!canEdit) return;
