@@ -96,6 +96,8 @@ const DEFAULT_RESPONSAVEIS = [
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
   { value: "em_renovacao", label: "Em renovação" },
+  { value: "inativo_temporario", label: "Inativo temporário" },
+  { value: "inativo_definitivo", label: "Inativo definitivo" },
   { value: "arquivado", label: "Arquivado" },
 ];
 const DEFAULT_VENCIMENTO_OPTIONS: OptionItem[] = [
@@ -145,10 +147,11 @@ type DocumentoDemanda = {
   created_at: string; updated_at: string; concluida_em: string | null;
 };
 
-type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado" | "renovacao_com_protocolo" | "renovacao_sem_protocolo";
+type Situacao = "ativo" | "atencao" | "critico" | "vencido" | "sem_validade" | "arquivado" | "inativo" | "renovacao_com_protocolo" | "renovacao_sem_protocolo";
 
 function situacaoFrom(d: Documento, hasProtocolo: boolean): Situacao {
   if (d.status === "arquivado") return "arquivado";
+  if (d.status === "inativo_temporario" || d.status === "inativo_definitivo") return "inativo";
   if (d.status === "em_renovacao") {
     return hasProtocolo ? "renovacao_com_protocolo" : "renovacao_sem_protocolo";
   }
@@ -170,6 +173,7 @@ const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof
   vencido:      { label: "Vencido",      cls: "bg-red-500/15 text-red-600 border-red-500/30",             icon: AlertOctagon },
   sem_validade: { label: "Sem validade", cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   arquivado:    { label: "Arquivado",    cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
+  inativo:      { label: "Inativo",      cls: "bg-zinc-500/15 text-zinc-600 border-zinc-500/30",           icon: FileText },
   renovacao_com_protocolo: { label: "Em renovação (protocolado)", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
   renovacao_sem_protocolo: { label: "Em renovação (sem protocolo)", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: AlertTriangle },
 };
@@ -690,7 +694,7 @@ function DocumentosPage() {
   const porVencimento = useMemo(() => {
     const docsPermitidos = new Map(docs.map(doc => [doc.id, doc]));
     const itensDocumento = enriched
-      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && doc.status !== "arquivado")
+      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !["arquivado", "inativo_temporario", "inativo_definitivo"].includes(doc.status))
       .map(({ doc, dias }) => ({
         name: doc.nome.length > 26 ? `${doc.nome.slice(0, 25)}...` : doc.nome,
         originalName: doc.nome,
@@ -760,7 +764,7 @@ function DocumentosPage() {
 
   const vitaisAlertas = useMemo(() => {
     return enriched.filter(({ doc, dias }) => {
-      if (doc.status === "arquivado") return false;
+      if (["arquivado", "inativo_temporario", "inativo_definitivo"].includes(doc.status)) return false;
       const orgao = (doc.orgao_emissor ?? "").toLowerCase();
       const subcat = (doc.subcategoria ?? "").toLowerCase();
       const isVitalOrgao = ["anvisa", "cetesb", "policia federal", "policia civil", "exército", "exercito"].some(o => orgao.includes(o) || subcat.includes(o));
@@ -2206,6 +2210,11 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       let docId: string;
       let novaVersao: number;
 
+      if (f.tipo_upload === "protocolo" && !duplicate) {
+        toast.error("Este arquivo parece ser uma renovação, mas não encontrei o documento original. Ajuste nome, órgão, empresa/CNPJ ou número para anexar ao documento certo.");
+        return;
+      }
+
       if (f.tipo_upload === "protocolo" && duplicate) {
         // Fluxo de Protocolo de Renovação para documento existente
         docId = duplicate.id;
@@ -2793,19 +2802,55 @@ function StepDot({ active, done, label, icon: Icon }: {
   );
 }
 
-function findDuplicate(docs: Documento[], f: { numero_documento?: string; nome?: string; cnpj?: string; empresa?: string; tipo_documento?: string }): Documento | null {
-  const num = (f.numero_documento ?? "").trim().toLowerCase();
-  const nome = (f.nome ?? "").trim().toLowerCase();
-  const cnpj = (f.cnpj ?? "").replace(/\D/g, "");
-  const empresa = (f.empresa ?? "").trim().toLowerCase();
-  const tipo = (f.tipo_documento ?? "").trim().toLowerCase();
+function normalizeDocText(value?: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
-  for (const d of docs) {
+function hasSharedMeaningfulToken(a: string, b: string) {
+  const ignore = new Set(["de", "da", "do", "das", "dos", "em", "para", "por", "com", "renovacao", "renovar", "protocolo", "comprovante", "recibo", "documento"]);
+  const tokensA = a.split(" ").filter(token => token.length >= 4 && !ignore.has(token));
+  if (tokensA.length === 0) return false;
+  const tokensB = new Set(b.split(" ").filter(Boolean));
+  return tokensA.some(token => tokensB.has(token));
+}
+
+function findDuplicate(docs: Documento[], f: {
+  numero_documento?: string;
+  nome?: string;
+  cnpj?: string;
+  empresa?: string;
+  tipo_documento?: string;
+  orgao_emissor?: string;
+  categoria?: string;
+  subcategoria?: string;
+  tipo_upload?: "licenca" | "protocolo";
+}): Documento | null {
+  const num = (f.numero_documento ?? "").trim().toLowerCase();
+  const nome = normalizeDocText(f.nome);
+  const cnpj = (f.cnpj ?? "").replace(/\D/g, "");
+  const empresa = normalizeDocText(f.empresa);
+  const tipo = normalizeDocText(f.tipo_documento);
+  const orgao = normalizeDocText(f.orgao_emissor);
+  const categoria = normalizeDocText(f.categoria);
+  const subcategoria = normalizeDocText(f.subcategoria);
+  const candidatos = f.tipo_upload === "protocolo"
+    ? docs.filter(d => !["arquivado", "inativo_definitivo"].includes(d.status))
+    : docs;
+
+  for (const d of candidatos) {
     const dNum = (d.numero_documento ?? "").trim().toLowerCase();
     const dCnpj = (d.cnpj ?? "").replace(/\D/g, "");
-    const dNome = (d.nome ?? "").trim().toLowerCase();
-    const dEmpresa = (d.empresa ?? "").trim().toLowerCase();
-    const dTipo = (d.tipo_documento ?? "").trim().toLowerCase();
+    const dNome = normalizeDocText(d.nome);
+    const dEmpresa = normalizeDocText(d.empresa);
+    const dTipo = normalizeDocText(d.tipo_documento);
+    const dOrgao = normalizeDocText(d.orgao_emissor);
+    const dCategoria = normalizeDocText(d.categoria);
+    const dSubcategoria = normalizeDocText(d.subcategoria);
 
     // Match forte: número + cnpj
     if (num && dNum && num === dNum && cnpj && dCnpj && cnpj === dCnpj) return d;
@@ -2815,6 +2860,16 @@ function findDuplicate(docs: Documento[], f: { numero_documento?: string; nome?:
     if (tipo && dTipo && tipo === dTipo && cnpj && dCnpj && cnpj === dCnpj) return d;
     // Fallback: mesmo nome exato
     if (nome && dNome && nome === dNome) return d;
+
+    if (f.tipo_upload === "protocolo") {
+      const mesmoOrgao = orgao && dOrgao && orgao === dOrgao;
+      const mesmaEmpresa = (cnpj && dCnpj && cnpj === dCnpj) || (empresa && dEmpresa && empresa === dEmpresa);
+      const mesmaPasta = categoria && dCategoria && categoria === dCategoria && (!subcategoria || !dSubcategoria || subcategoria === dSubcategoria);
+      const nomeParecido = nome && dNome && (nome.includes(dNome) || dNome.includes(nome) || hasSharedMeaningfulToken(nome, dNome));
+
+      if (mesmoOrgao && (mesmaEmpresa || mesmaPasta || nomeParecido)) return d;
+      if (mesmaEmpresa && mesmaPasta && (nomeParecido || mesmoOrgao)) return d;
+    }
   }
   return null;
 }
