@@ -95,7 +95,7 @@ const DEFAULT_RESPONSAVEIS = [
 ];
 const DEFAULT_STATUS_OPTIONS: OptionItem[] = [
   { value: "ativo", label: "Ativo" },
-  { value: "em_renovacao", label: "Em renovação" },
+  { value: "em_renovacao", label: "Processo de renovação" },
   { value: "inativo_temporario", label: "Inativo temporário" },
   { value: "inativo_definitivo", label: "Inativo definitivo" },
   { value: "arquivado", label: "Arquivado" },
@@ -174,8 +174,8 @@ const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof
   sem_validade: { label: "Sem validade", cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   arquivado:    { label: "Arquivado",    cls: "bg-muted text-muted-foreground border-border",             icon: FileText },
   inativo:      { label: "Inativo",      cls: "bg-zinc-500/15 text-zinc-600 border-zinc-500/30",           icon: FileText },
-  renovacao_com_protocolo: { label: "Em renovação (protocolado)", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
-  renovacao_sem_protocolo: { label: "Em renovação (sem protocolo)", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: AlertTriangle },
+  renovacao_com_protocolo: { label: "Processo de renovação (protocolado)", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30", icon: Clock },
+  renovacao_sem_protocolo: { label: "Processo de renovação (sem protocolo)", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30", icon: AlertTriangle },
 };
 
 function diasAteVencer(d: Documento): number | null {
@@ -830,7 +830,7 @@ function DocumentosPage() {
         <KpiCard icon={Clock} label="Atenção (45d)" value={stats.atencao} tone="amber" />
         <KpiCard icon={AlertTriangle} label="Crítico (15d)" value={stats.critico} tone="orange" />
         <KpiCard icon={AlertOctagon} label="Vencidos" value={stats.vencido} tone="red" />
-        <KpiCard icon={RotateCw} label="Em renovação" value={stats.em_renovacao} tone="blue" />
+        <KpiCard icon={RotateCw} label="Processo de renovação" value={stats.em_renovacao} tone="blue" />
       </div>
 
       {/* Gráficos */}
@@ -1868,14 +1868,14 @@ function DocumentoDrawer({ documento, canEdit, onClose, onChanged, onEdit, onRem
               <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/75 p-3 text-sm text-blue-700">
                 <Clock className="h-4 w-4 shrink-0 text-blue-500" />
                 <div>
-                  <span className="font-semibold">📘 Protocolo de Renovação anexado.</span> Regularidade provisória comprovada.
+                  <span className="font-semibold">Protocolo de Renovação salvo no histórico de versões.</span> Regularidade provisória comprovada.
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/75 p-3 text-sm text-amber-700">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 animate-pulse" />
                 <div>
-                  <span className="font-semibold">⚠️ Documento em renovação, mas nenhum comprovante de protocolo foi anexado ainda.</span> Anexe o protocolo para garantir a conformidade.
+                  <span className="font-semibold">Documento em renovação, mas nenhum protocolo foi salvo como versão ainda.</span> Envie o protocolo como nova versão para garantir a conformidade.
                 </div>
               </div>
             )
@@ -2181,7 +2181,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       // Dedup check
       const dup = findDuplicate(existing, next);
       setDuplicate(dup);
-      setReplaceMode(ehProtocolo && dup ? true : false);
+      setReplaceMode(!!dup);
 
       setProgress(100);
       setStep("review");
@@ -2207,48 +2207,58 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         nomeUser = data?.nome ?? "Usuário";
       }
 
+      const matchedDocument = duplicate ?? findDuplicate(existing, f);
+      if (matchedDocument && !duplicate) setDuplicate(matchedDocument);
+
       let docId: string;
       let novaVersao: number;
 
-      if (f.tipo_upload === "protocolo" && !duplicate) {
-        toast.error("Este arquivo parece ser uma renovação, mas não encontrei o documento original. Ajuste nome, órgão, empresa/CNPJ ou número para anexar ao documento certo.");
+      if (f.tipo_upload === "protocolo" && !matchedDocument) {
+        toast.error("Protocolo de renovação precisa ser associado a um documento já existente. Ajuste nome, órgão, empresa/CNPJ ou número para localizar o documento original.");
         return;
       }
 
-      if (f.tipo_upload === "protocolo" && duplicate) {
-        // Fluxo de Protocolo de Renovação para documento existente
-        docId = duplicate.id;
+      if (f.tipo_upload === "licenca" && matchedDocument && !replaceMode) {
+        toast.error("Este documento já existe. Para evitar duplicidade, use a opção de substituir/adicionar nova versão ao documento existente.");
+        return;
+      }
+
+      if (f.tipo_upload === "protocolo" && matchedDocument) {
+        docId = matchedDocument.id;
+        novaVersao = (matchedDocument.versao_atual ?? 0) + 1;
         const payload = {
           status: "em_renovacao",
-          observacoes: f.observacoes || duplicate.observacoes || null
+          observacoes: f.observacoes || matchedDocument.observacoes || null,
+          validado_ia: true,
+          validado_em: new Date().toISOString(),
+          versao_atual: novaVersao,
         };
         const { error: updateError } = await updateDocumentoPayload(docId, payload);
         if (updateError) throw updateError;
 
-        // Upload do arquivo (anexo)
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const path = `${docId}/anexo/${Date.now()}_${safe}`;
+        const path = `${docId}/versao/${Date.now()}_${safe}`;
         const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, upsert: false });
         if (up.error) throw up.error;
 
-        // Inserir em documento_anexos
-        const insA = await supabase.from("documento_anexos").insert({
+        const insV = await supabase.from("documento_versoes").insert({
           documento_id: docId,
+          versao: novaVersao,
           storage_path: path,
           nome_arquivo: file.name,
           mime_type: file.type,
           tamanho_bytes: file.size,
-          observacoes: `Protocolo anexado via Upload Inteligente · ${nomeUser}`,
+          observacoes: `Protocolo de renovacao v${novaVersao} validado por IA · ${nomeUser}`,
           enviado_por: userId,
           enviado_por_nome: nomeUser,
         });
-        if (insA.error) throw insA.error;
+        if (insV.error) throw insV.error;
 
-        toast.success(`Protocolo anexado com sucesso e status alterado para 'Em renovação'`);
-      } else if (replaceMode && duplicate) {
+        toast.success(`Protocolo salvo como versao v${novaVersao} e status alterado para 'Processo de renovacao'`);
+      } else if (replaceMode && matchedDocument) {
         // Fluxo de Licença Definitiva para documento existente (substituição de versão)
-        docId = duplicate.id;
-        novaVersao = (duplicate.versao_atual ?? 0) + 1;
+        docId = matchedDocument.id;
+        novaVersao = (matchedDocument.versao_atual ?? 0) + 1;
         const payload: any = {
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
@@ -2298,11 +2308,11 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         });
         if (insV.error) throw insV.error;
 
-        toast.success(`Documento atualizado para v${novaVersao} (Licença Ativa)`);
+        toast.success(`Documento existente atualizado para v${novaVersao} (Licença ativa)`);
       } else {
         // Documento novo (sem duplicate)
         novaVersao = 1;
-        const statusDestino = f.tipo_upload === "protocolo" ? "em_renovacao" : "ativo";
+        const statusDestino = "ativo";
         const payload: any = {
           nome: f.nome,
           tipo_documento: f.tipo_documento || null,
@@ -2353,7 +2363,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
         });
         if (insV.error) throw insV.error;
 
-        toast.success(f.tipo_upload === "protocolo" ? "Novo documento criado com status 'Em renovação'" : "Novo documento criado ativo");
+        toast.success("Novo documento criado ativo");
       }
 
       const demandaGerada = await gerarDemandasRecorrentes(docId, {
@@ -2490,14 +2500,17 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
               <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 bg-muted/20">
                 <div className="col-span-2">
                   <Label className="text-xs font-semibold">Finalidade do Arquivo</Label>
-                  <p className="text-[11px] text-muted-foreground mb-2">Selecione se está enviando a licença final ativa ou um protocolo de renovação em andamento.</p>
+                  <p className="text-[11px] text-muted-foreground mb-2">Licença definitiva cria uma versão ativa; protocolo de renovação entra como nova versão do documento existente.</p>
                 </div>
                 <Button
                   type="button"
                   variant={f.tipo_upload === "licenca" ? "default" : "outline"}
                   onClick={() => {
-                    setF(s => ({ ...s, tipo_upload: "licenca" }));
-                    if (duplicate) setReplaceMode(true);
+                    const next = { ...f, tipo_upload: "licenca" as const };
+                    const dup = findDuplicate(existing, next);
+                    setF(next);
+                    setDuplicate(dup);
+                    setReplaceMode(!!dup);
                   }}
                   className="w-full gap-2 text-xs h-9"
                 >
@@ -2507,8 +2520,11 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                   type="button"
                   variant={f.tipo_upload === "protocolo" ? "default" : "outline"}
                   onClick={() => {
-                    setF(s => ({ ...s, tipo_upload: "protocolo" }));
-                    if (duplicate) setReplaceMode(true);
+                    const next = { ...f, tipo_upload: "protocolo" as const };
+                    const dup = findDuplicate(existing, next);
+                    setF(next);
+                    setDuplicate(dup);
+                    setReplaceMode(!!dup);
                   }}
                   className="w-full gap-2 text-xs h-9"
                 >
@@ -2526,10 +2542,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                   </div>
                   <div className="mt-2 flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setReplaceMode(true)}>
-                      <History className="h-3 w-3" /> Substituir versão
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setDuplicate(null)}>
-                      Criar novo mesmo assim
+                      <History className="h-3 w-3" /> Usar documento existente
                     </Button>
                   </div>
                 </div>
@@ -2539,7 +2552,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                 <div className="rounded-md border border-blue-500/40 bg-blue-500/10 p-2 text-xs">
                   <CheckCircle2 className="mr-1 inline h-3.5 w-3.5 text-blue-600" />
                   {f.tipo_upload === "protocolo" ? (
-                    <span>O arquivo será anexado a <b>{duplicate.nome}</b> e o status alterado para <b>Em renovação</b>.</span>
+                    <span>O arquivo será salvo como versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> e o status alterado para <b>Processo de renovação</b>.</span>
                   ) : (
                     <span>Será criada a versão <b>v{(duplicate.versao_atual ?? 0) + 1}</b> de <b>{duplicate.nome}</b> (ativo).</span>
                   )}
