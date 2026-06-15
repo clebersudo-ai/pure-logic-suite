@@ -462,8 +462,32 @@ function DocumentosPage() {
   const [configOpen, setConfigOpen] = useState(false);
   const [versoesList, setVersoesList] = useState<{ documento_id: string; nome_arquivo: string }[]>([]);
   const [anexosList, setAnexosList] = useState<{ documento_id: string; nome_arquivo: string }[]>([]);
-  const [userProfile, setUserProfile] = useState<{ nome: string; email: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ nome: string; email: string | null } | null>(null);
   const [toastNotified, setToastNotified] = useState(false);
+
+  const categorias = useMemo(() => {
+    const all = optionTextItems(options, "categoria", DEFAULT_CATEGORIAS);
+    if (isAdmin || allowedCategorias == null) return all;
+    return all.filter(categoria => allowedCategorias.includes(categoria));
+  }, [options, allowedCategorias, isAdmin]);
+  const orgaos = useMemo(() => optionTextItems(options, "orgao", DEFAULT_ORGAOS), [options]);
+  const responsaveisOpcoes = useMemo(
+    () => optionTextItems(options, "responsavel", DEFAULT_RESPONSAVEIS),
+    [options],
+  );
+  const statusOpcoes = useMemo(
+    () => optionValueItems(options, "status", DEFAULT_STATUS_OPTIONS),
+    [options],
+  );
+  const vencimentoOpcoes = useMemo(
+    () => optionValueItems(options, "vencimento", DEFAULT_VENCIMENTO_OPTIONS),
+    [options],
+  );
+  const recorrenciaOpcoes = [
+    { value: "recorrentes", label: "Recorrentes" },
+    { value: "atrasadas", label: "Atualização vencida" },
+    { value: "30", label: "Próximos 30 dias" },
+  ];
 
   useEffect(() => {
     async function fetchProfile() {

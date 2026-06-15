@@ -18,7 +18,7 @@ export const Route = createFileRoute("/")({ component: () => (<RequireAuth><AppL
 
 function Dashboard() {
   const { user } = useAuth();
-  const [userProfile, setUserProfile] = useState<{ nome: string; email: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ nome: string; email: string | null } | null>(null);
 
   useEffect(() => {
     async function fetchProfile() {
