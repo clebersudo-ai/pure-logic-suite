@@ -29,7 +29,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { extractDocumentMetadata } from "@/lib/extract-document.functions";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Cell, CartesianGrid,
+  PieChart, Pie, Cell, CartesianGrid, LabelList,
 } from "recharts";
 
 export const Route = createFileRoute("/documentos")({
@@ -755,44 +755,38 @@ function DocumentosPage() {
   }, [docs]);
 
   const porVencimento = useMemo(() => {
-    const docsPermitidos = new Map(docs.map(doc => [doc.id, doc]));
-    const itensDocumento = enriched
+    const itensDocumento = filtered
       .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !isNotMonitoredStatus(doc.status))
       .map(({ doc, dias }) => {
         const orgaoEmissor = doc.orgao_emissor?.trim() || "Sem órgão emissor";
         return {
           key: `documento-${doc.id}`,
+          documentoId: doc.id,
           name: orgaoEmissor.length > 26 ? `${orgaoEmissor.slice(0, 25)}...` : orgaoEmissor,
           originalName: orgaoEmissor,
+          documentName: doc.nome,
           tipo: "Documento",
           dias: dias ?? 0,
           diasGrafico: Math.max(Math.abs(dias ?? 0), 1),
           statusLabel: (dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)}d` : `Vence em ${dias}d`,
+          barLabel: `${doc.nome} • ${(dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)} dias` : `Vence em ${dias} dias`}`,
           prioridade: dias ?? 999999,
         };
       });
-    const itensDemandas = demandas
-      .filter(demanda => demanda.data_limite && demanda.status !== "concluida" && docsPermitidos.has(demanda.documento_id))
-      .map(demanda => {
-        const dias = diasAteData(demanda.data_limite) ?? 999999;
-        const documento = docsPermitidos.get(demanda.documento_id);
-        const orgaoEmissor = documento?.orgao_emissor?.trim() || "Sem órgão emissor";
-        return {
-          key: `demanda-${demanda.id}`,
-          name: orgaoEmissor.length > 26 ? `${orgaoEmissor.slice(0, 25)}...` : orgaoEmissor,
-          originalName: orgaoEmissor,
-          tipo: "Tarefa",
-          dias,
-          diasGrafico: Math.max(Math.abs(dias), 1),
-          statusLabel: dias < 0 ? `Vencida há ${Math.abs(dias)}d` : `Vence em ${dias}d`,
-          prioridade: dias,
-        };
-      });
 
-    return [...itensDocumento, ...itensDemandas]
+    return itensDocumento
       .sort((a, b) => a.prioridade - b.prioridade)
-      .slice(0, 10);
-  }, [docs, demandas, enriched]);
+      .slice(0, 10)
+      .map((item, index) => ({
+        ...item,
+        color: item.dias < 0 ? "#dc2626" : CHART_COLORS[index % CHART_COLORS.length],
+      }));
+  }, [filtered]);
+
+  const corGraficoPorDocumento = useMemo(
+    () => new Map(porVencimento.map(item => [item.documentoId, item.color])),
+    [porVencimento],
+  );
 
   function limparFiltros() {
     setSearch(""); setFCategoria("__all"); setFSubcategoria("__all"); setFOrgao("__all");
@@ -932,9 +926,13 @@ function DocumentosPage() {
                     <Badge
                       key={`${item.tipo}-${item.originalName}-${item.prioridade}`}
                       variant="outline"
-                      className={item.dias < 0 ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}
+                      style={{
+                        borderColor: item.color,
+                        color: item.color,
+                        backgroundColor: `color-mix(in srgb, ${item.color} 10%, transparent)`,
+                      }}
                     >
-                      {item.tipo}: {item.statusLabel}
+                      {item.documentName}: {item.statusLabel}
                     </Badge>
                   ))}
                 </div>
@@ -949,15 +947,11 @@ function DocumentosPage() {
                         tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                         label={{ value: "dias", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                       />
-                      <YAxis type="category" dataKey="name" reversed width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                      <Tooltip
-                        formatter={(_, __, props: any) => [props.payload.statusLabel, props.payload.tipo]}
-                        labelFormatter={(_, payload) => payload?.[0]?.payload?.originalName ?? ""}
-                        contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                      />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                       <Bar dataKey="diasGrafico" radius={[0, 4, 4, 0]}>
-                        {porVencimento.map((item, i) => (
-                          <Cell key={item.key} fill={item.dias < 0 ? "#dc2626" : CHART_COLORS[i % CHART_COLORS.length]} />
+                        <LabelList dataKey="barLabel" position="insideLeft" fill="#fff" fontSize={10} />
+                        {porVencimento.map(item => (
+                          <Cell key={item.key} fill={item.color} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -1068,8 +1062,17 @@ function DocumentosPage() {
               const situacoes = isRenewalPhase(doc.status) && doc.status !== "licenca_renovada"
                 ? Array.from(new Set<Situacao>([situacaoValidadeFrom(doc), situacao]))
                 : [situacao];
+              const corGrafico = corGraficoPorDocumento.get(doc.id);
               return (
-                <TableRow key={doc.id} className="cursor-pointer" onClick={() => setSelected(doc)}>
+                <TableRow
+                  key={doc.id}
+                  className="cursor-pointer"
+                  style={corGrafico ? {
+                    boxShadow: `inset 4px 0 ${corGrafico}`,
+                    backgroundColor: `color-mix(in srgb, ${corGrafico} 6%, transparent)`,
+                  } : undefined}
+                  onClick={() => setSelected(doc)}
+                >
                   <TableCell className="text-sm">{doc.subcategoria ?? "—"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
