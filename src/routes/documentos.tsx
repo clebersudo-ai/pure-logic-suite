@@ -206,6 +206,18 @@ function situacaoFrom(d: Documento, hasProtocolo: boolean): Situacao {
   return "ativo";
 }
 
+function situacaoValidadeFrom(d: Documento): Situacao {
+  if (!d.data_validade) return "sem_validade";
+  if (!d.renovacao_obrigatoria) return "ativo";
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const validade = new Date(d.data_validade + "T00:00:00");
+  const dias = Math.ceil((validade.getTime() - hoje.getTime()) / 86400000);
+  if (dias < 0) return "vencido";
+  if (dias <= 15) return "critico";
+  if (dias <= 45) return "atencao";
+  return "ativo";
+}
+
 const SITUACAO_META: Record<Situacao, { label: string; cls: string; icon: typeof FileText }> = {
   ativo:        { label: "Ativo",        cls: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30", icon: ShieldCheck },
   atencao:      { label: "Atenção",      cls: "bg-amber-500/15 text-amber-600 border-amber-500/30",       icon: Clock },
@@ -746,24 +758,29 @@ function DocumentosPage() {
     const docsPermitidos = new Map(docs.map(doc => [doc.id, doc]));
     const itensDocumento = enriched
       .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !isNotMonitoredStatus(doc.status))
-      .map(({ doc, dias }) => ({
-        name: doc.nome.length > 26 ? `${doc.nome.slice(0, 25)}...` : doc.nome,
-        originalName: doc.nome,
-        tipo: "Documento",
-        dias: dias ?? 0,
-        diasGrafico: Math.max(Math.abs(dias ?? 0), 1),
-        statusLabel: (dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)}d` : `Vence em ${dias}d`,
-        prioridade: dias ?? 999999,
-      }));
+      .map(({ doc, dias }) => {
+        const orgaoEmissor = doc.orgao_emissor?.trim() || "Sem órgão emissor";
+        return {
+          key: `documento-${doc.id}`,
+          name: orgaoEmissor.length > 26 ? `${orgaoEmissor.slice(0, 25)}...` : orgaoEmissor,
+          originalName: orgaoEmissor,
+          tipo: "Documento",
+          dias: dias ?? 0,
+          diasGrafico: Math.max(Math.abs(dias ?? 0), 1),
+          statusLabel: (dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)}d` : `Vence em ${dias}d`,
+          prioridade: dias ?? 999999,
+        };
+      });
     const itensDemandas = demandas
       .filter(demanda => demanda.data_limite && demanda.status !== "concluida" && docsPermitidos.has(demanda.documento_id))
       .map(demanda => {
         const dias = diasAteData(demanda.data_limite) ?? 999999;
-        const nomeDocumento = docsPermitidos.get(demanda.documento_id)?.nome;
-        const titulo = demanda.titulo || nomeDocumento || "Tarefa";
+        const documento = docsPermitidos.get(demanda.documento_id);
+        const orgaoEmissor = documento?.orgao_emissor?.trim() || "Sem órgão emissor";
         return {
-          name: titulo.length > 26 ? `${titulo.slice(0, 25)}...` : titulo,
-          originalName: titulo,
+          key: `demanda-${demanda.id}`,
+          name: orgaoEmissor.length > 26 ? `${orgaoEmissor.slice(0, 25)}...` : orgaoEmissor,
+          originalName: orgaoEmissor,
           tipo: "Tarefa",
           dias,
           diasGrafico: Math.max(Math.abs(dias), 1),
@@ -932,7 +949,7 @@ function DocumentosPage() {
                         tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                         label={{ value: "dias", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                       />
-                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis type="category" dataKey="name" reversed width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                       <Tooltip
                         formatter={(_, __, props: any) => [props.payload.statusLabel, props.payload.tipo]}
                         labelFormatter={(_, payload) => payload?.[0]?.payload?.originalName ?? ""}
@@ -940,7 +957,7 @@ function DocumentosPage() {
                       />
                       <Bar dataKey="diasGrafico" radius={[0, 4, 4, 0]}>
                         {porVencimento.map((item, i) => (
-                          <Cell key={i} fill={item.dias < 0 ? "#dc2626" : CHART_COLORS[i % CHART_COLORS.length]} />
+                          <Cell key={item.key} fill={item.dias < 0 ? "#dc2626" : CHART_COLORS[i % CHART_COLORS.length]} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -1048,8 +1065,9 @@ function DocumentosPage() {
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={9}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
             ) : filtered.map(({ doc, situacao, dias }) => {
-              const meta = SITUACAO_META[situacao];
-              const Icon = meta.icon;
+              const situacoes = isRenewalPhase(doc.status) && doc.status !== "licenca_renovada"
+                ? Array.from(new Set<Situacao>([situacaoValidadeFrom(doc), situacao]))
+                : [situacao];
               return (
                 <TableRow key={doc.id} className="cursor-pointer" onClick={() => setSelected(doc)}>
                   <TableCell className="text-sm">{doc.subcategoria ?? "—"}</TableCell>
@@ -1097,9 +1115,17 @@ function DocumentosPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={`gap-1 ${meta.cls}`}>
-                      <Icon className="h-3 w-3" /> {meta.label}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1.5">
+                      {situacoes.map(status => {
+                        const meta = SITUACAO_META[status];
+                        const Icon = meta.icon;
+                        return (
+                          <Badge key={status} variant="outline" className={`gap-1 ${meta.cls}`}>
+                            <Icon className="h-3 w-3" /> {meta.label}
+                          </Badge>
+                        );
+                      })}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
