@@ -250,6 +250,35 @@ function diasAteData(data: string | null) {
   return Math.ceil((alvo.getTime() - hoje.getTime()) / 86400000);
 }
 
+function prazoEfetivoDocumento(doc: Documento, diasValidade: number | null) {
+  const prazos: Array<{ dias: number; tipo: "validade" | "atualizacao" }> = [];
+  if (doc.renovacao_obrigatoria && diasValidade != null) {
+    prazos.push({ dias: diasValidade, tipo: "validade" });
+  }
+  const diasAtualizacao = doc.atualizacao_recorrente ? diasAteData(doc.proxima_atualizacao) : null;
+  if (diasAtualizacao != null) {
+    prazos.push({ dias: diasAtualizacao, tipo: "atualizacao" });
+  }
+  return prazos.sort((a, b) => a.dias - b.dias)[0] ?? null;
+}
+
+function BarTextLabel({ x, y, height, value }: { x?: number; y?: number; height?: number; value?: string }) {
+  if (x == null || y == null || height == null || !value) return null;
+  return (
+    <text
+      x={x + 8}
+      y={y + height / 2}
+      dy="0.35em"
+      fill="#fff"
+      fontSize={10}
+      fontWeight={600}
+      style={{ paintOrder: "stroke", stroke: "rgba(0, 0, 0, 0.65)", strokeWidth: 2 }}
+    >
+      {value}
+    </text>
+  );
+}
+
 function formatBytes(b: number | null) {
   if (!b) return "—";
   const u = ["B", "KB", "MB", "GB"]; let i = 0; let n = b;
@@ -736,6 +765,14 @@ function DocumentosPage() {
     });
   }, [enriched, search, fCategoria, fSubcategoria, fOrgao, fResponsavel, fSituacao, fVencimento, fRecorrencia, fMinhasDemandas, demandas]);
 
+  const filteredOrdenado = useMemo(() => (
+    [...filtered].sort((a, b) => {
+      const prazoA = prazoEfetivoDocumento(a.doc, a.dias)?.dias ?? Number.POSITIVE_INFINITY;
+      const prazoB = prazoEfetivoDocumento(b.doc, b.dias)?.dias ?? Number.POSITIVE_INFINITY;
+      return prazoA - prazoB;
+    })
+  ), [filtered]);
+
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
     for (const { doc, situacao } of enriched) {
@@ -755,23 +792,25 @@ function DocumentosPage() {
   }, [docs]);
 
   const porVencimento = useMemo(() => {
-    const itensDocumento = filtered
-      .filter(({ doc, dias }) => doc.renovacao_obrigatoria && dias != null && !isNotMonitoredStatus(doc.status))
-      .map(({ doc, dias }) => {
+    const itensDocumento = filteredOrdenado
+      .flatMap(({ doc, dias }) => {
+        const prazo = prazoEfetivoDocumento(doc, dias);
+        if (!prazo || isNotMonitoredStatus(doc.status)) return [];
         const orgaoEmissor = doc.orgao_emissor?.trim() || "Sem órgão emissor";
-        return {
+        const statusLabel = prazo.tipo === "atualizacao"
+          ? (prazo.dias < 0 ? `Atualização vencida há ${Math.abs(prazo.dias)}d` : `Atualizar em ${prazo.dias}d`)
+          : (prazo.dias < 0 ? `Vencido há ${Math.abs(prazo.dias)}d` : `Vence em ${prazo.dias}d`);
+        return [{
           key: `documento-${doc.id}`,
           documentoId: doc.id,
           name: orgaoEmissor.length > 26 ? `${orgaoEmissor.slice(0, 25)}...` : orgaoEmissor,
-          originalName: orgaoEmissor,
           documentName: doc.nome,
-          tipo: "Documento",
-          dias: dias ?? 0,
-          diasGrafico: Math.max(Math.abs(dias ?? 0), 1),
-          statusLabel: (dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)}d` : `Vence em ${dias}d`,
-          barLabel: `${doc.nome} • ${(dias ?? 0) < 0 ? `Vencido há ${Math.abs(dias ?? 0)} dias` : `Vence em ${dias} dias`}`,
-          prioridade: dias ?? 999999,
-        };
+          dias: prazo.dias,
+          diasGrafico: Math.max(Math.abs(prazo.dias), 1),
+          statusLabel,
+          barLabel: `${doc.nome} • ${statusLabel.replace(/(\d+)d$/, "$1 dias")}`,
+          prioridade: prazo.dias,
+        }];
       });
 
     return itensDocumento
@@ -781,7 +820,7 @@ function DocumentosPage() {
         ...item,
         color: item.dias < 0 ? "#dc2626" : CHART_COLORS[index % CHART_COLORS.length],
       }));
-  }, [filtered]);
+  }, [filteredOrdenado]);
 
   const corGraficoPorDocumento = useMemo(
     () => new Map(porVencimento.map(item => [item.documentoId, item.color])),
@@ -920,25 +959,9 @@ function DocumentosPage() {
           </div>
           <div className="h-80 p-4">
             {porVencimento.length === 0 ? <EmptyState label="Sem dados" /> : (
-              <div className="flex h-full flex-col gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {porVencimento.slice(0, 4).map(item => (
-                    <Badge
-                      key={`${item.tipo}-${item.originalName}-${item.prioridade}`}
-                      variant="outline"
-                      style={{
-                        borderColor: item.color,
-                        color: item.color,
-                        backgroundColor: `color-mix(in srgb, ${item.color} 10%, transparent)`,
-                      }}
-                    >
-                      {item.documentName}: {item.statusLabel}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="min-h-0 flex-1">
+              <div className="h-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={porVencimento} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 18 }}>
+                    <BarChart data={porVencimento} layout="vertical" margin={{ top: 5, right: 190, left: 10, bottom: 18 }}>
                       <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         type="number"
@@ -949,14 +972,13 @@ function DocumentosPage() {
                       />
                       <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
                       <Bar dataKey="diasGrafico" radius={[0, 4, 4, 0]}>
-                        <LabelList dataKey="barLabel" position="insideLeft" fill="#fff" fontSize={10} />
+                        <LabelList dataKey="barLabel" content={<BarTextLabel />} />
                         {porVencimento.map(item => (
                           <Cell key={item.key} fill={item.color} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
               </div>
             )}
           </div>
@@ -1058,7 +1080,7 @@ function DocumentosPage() {
               <TableRow><TableCell colSpan={9}><EmptyState label="Carregando…" /></TableCell></TableRow>
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={9}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
-            ) : filtered.map(({ doc, situacao, dias }) => {
+            ) : filteredOrdenado.map(({ doc, situacao, dias }) => {
               const situacoes = isRenewalPhase(doc.status) && doc.status !== "licenca_renovada"
                 ? Array.from(new Set<Situacao>([situacaoValidadeFrom(doc), situacao]))
                 : [situacao];
@@ -1069,7 +1091,7 @@ function DocumentosPage() {
                   className="cursor-pointer"
                   style={corGrafico ? {
                     boxShadow: `inset 4px 0 ${corGrafico}`,
-                    backgroundColor: `color-mix(in srgb, ${corGrafico} 6%, transparent)`,
+                    backgroundColor: `color-mix(in srgb, ${corGrafico} 80%, hsl(var(--background)))`,
                   } : undefined}
                   onClick={() => setSelected(doc)}
                 >
