@@ -373,6 +373,69 @@ export type Database = {
           },
         ]
       }
+      laboratorio_amostras: {
+        Row: {
+          codigo: string
+          created_at: string
+          criado_por: string | null
+          especificacao: string | null
+          etapa: string
+          id: string
+          lote: string | null
+          material: string
+          metodo: string | null
+          observacoes: string | null
+          origem: string | null
+          parecer: string | null
+          prazo_resposta: string | null
+          prioridade: string
+          responsavel: string | null
+          resultado: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          criado_por?: string | null
+          especificacao?: string | null
+          etapa?: string
+          id?: string
+          lote?: string | null
+          material: string
+          metodo?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          parecer?: string | null
+          prazo_resposta?: string | null
+          prioridade?: string
+          responsavel?: string | null
+          resultado?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          criado_por?: string | null
+          especificacao?: string | null
+          etapa?: string
+          id?: string
+          lote?: string | null
+          material?: string
+          metodo?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          parecer?: string | null
+          prazo_resposta?: string | null
+          prioridade?: string
+          responsavel?: string | null
+          resultado?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       materias_primas: {
         Row: {
           codigo_interno: string
