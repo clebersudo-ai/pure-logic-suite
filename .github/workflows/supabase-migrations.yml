@@ -62,7 +62,30 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push database migrations
+        id: push-migrations
+        continue-on-error: true
         run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Apply Laboratorio migration through Supabase pooler
+        if: steps.push-migrations.outcome == 'failure'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          REGION="$(curl -sS \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/${{ steps.supabase-project.outputs.project_ref }}" \
+            | jq -r '.region')"
+          if [ -z "$REGION" ] || [ "$REGION" = "null" ]; then
+            echo "::error::Nao foi possivel identificar a regiao do projeto Supabase."
+            exit 1
+          fi
+          PGPASSWORD="$SUPABASE_DB_PASSWORD" psql \
+            "host=aws-0-${REGION}.pooler.supabase.com port=6543 dbname=postgres user=postgres.${{ steps.supabase-project.outputs.project_ref }} sslmode=require" \
+            -v ON_ERROR_STOP=1 \
+            -f supabase/migrations/20260620170000_add_laboratorio_amostras.sql
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
