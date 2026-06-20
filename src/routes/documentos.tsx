@@ -533,7 +533,12 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function chartCellStyle(color?: string): CSSProperties | undefined {
-  return color ? { backgroundColor: hexToRgba(color, 0.5) } : undefined;
+  if (!color) return undefined;
+  return {
+    background: `linear-gradient(90deg, ${hexToRgba(color, 0.10)}, ${hexToRgba(color, 0.04)})`,
+    borderTop: `1px solid ${hexToRgba(color, 0.24)}`,
+    borderBottom: `1px solid ${hexToRgba(color, 0.24)}`,
+  };
 }
 
 function toOptionItem(o: DocumentoOpcao): OptionItem {
