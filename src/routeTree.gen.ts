@@ -15,6 +15,7 @@ import { Route as ProdutosRouteImport } from './routes/produtos'
 import { Route as ProducaoRouteImport } from './routes/producao'
 import { Route as MateriasPrimasRouteImport } from './routes/materias-primas'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LaboratorioRouteImport } from './routes/laboratorio'
 import { Route as FormulacoesRouteImport } from './routes/formulacoes'
 import { Route as EstoqueRouteImport } from './routes/estoque'
 import { Route as DocumentosRouteImport } from './routes/documentos'
@@ -50,6 +51,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaboratorioRoute = LaboratorioRouteImport.update({
+  id: '/laboratorio',
+  path: '/laboratorio',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FormulacoesRoute = FormulacoesRouteImport.update({
   id: '/formulacoes',
   path: '/formulacoes',
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/documentos': typeof DocumentosRoute
   '/estoque': typeof EstoqueRoute
   '/formulacoes': typeof FormulacoesRoute
+  '/laboratorio': typeof LaboratorioRoute
   '/login': typeof LoginRoute
   '/materias-primas': typeof MateriasPrimasRoute
   '/producao': typeof ProducaoRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/documentos': typeof DocumentosRoute
   '/estoque': typeof EstoqueRoute
   '/formulacoes': typeof FormulacoesRoute
+  '/laboratorio': typeof LaboratorioRoute
   '/login': typeof LoginRoute
   '/materias-primas': typeof MateriasPrimasRoute
   '/producao': typeof ProducaoRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/documentos': typeof DocumentosRoute
   '/estoque': typeof EstoqueRoute
   '/formulacoes': typeof FormulacoesRoute
+  '/laboratorio': typeof LaboratorioRoute
   '/login': typeof LoginRoute
   '/materias-primas': typeof MateriasPrimasRoute
   '/producao': typeof ProducaoRoute
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/documentos'
     | '/estoque'
     | '/formulacoes'
+    | '/laboratorio'
     | '/login'
     | '/materias-primas'
     | '/producao'
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/documentos'
     | '/estoque'
     | '/formulacoes'
+    | '/laboratorio'
     | '/login'
     | '/materias-primas'
     | '/producao'
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/documentos'
     | '/estoque'
     | '/formulacoes'
+    | '/laboratorio'
     | '/login'
     | '/materias-primas'
     | '/producao'
@@ -152,6 +164,7 @@ export interface RootRouteChildren {
   DocumentosRoute: typeof DocumentosRoute
   EstoqueRoute: typeof EstoqueRoute
   FormulacoesRoute: typeof FormulacoesRoute
+  LaboratorioRoute: typeof LaboratorioRoute
   LoginRoute: typeof LoginRoute
   MateriasPrimasRoute: typeof MateriasPrimasRoute
   ProducaoRoute: typeof ProducaoRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/laboratorio': {
+      id: '/laboratorio'
+      path: '/laboratorio'
+      fullPath: '/laboratorio'
+      preLoaderRoute: typeof LaboratorioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/formulacoes': {
       id: '/formulacoes'
       path: '/formulacoes'
@@ -240,6 +260,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentosRoute: DocumentosRoute,
   EstoqueRoute: EstoqueRoute,
   FormulacoesRoute: FormulacoesRoute,
+  LaboratorioRoute: LaboratorioRoute,
   LoginRoute: LoginRoute,
   MateriasPrimasRoute: MateriasPrimasRoute,
   ProducaoRoute: ProducaoRoute,

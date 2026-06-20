@@ -4,7 +4,7 @@ import { useTheme } from "@/lib/theme";
 import {
   LayoutDashboard, FlaskConical, Package, Beaker, Factory,
   Warehouse, ShieldCheck, LogOut, Menu, Users, Search, Moon, Sun,
-  ChevronsLeft, ChevronsRight, Bell, FolderOpen,
+  ChevronsLeft, ChevronsRight, Bell, FolderOpen, Microscope,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { to: "/producao", label: "Produção", icon: Factory },
   { to: "/estoque", label: "Estoque", icon: Warehouse },
   { to: "/qualidade", label: "Qualidade", icon: ShieldCheck },
+  { to: "/laboratorio", label: "Laboratório", icon: Microscope },
   { to: "/documentos", label: "Documentos", icon: FolderOpen },
   { to: "/usuarios", label: "Usuários", icon: Users, adminOnly: true },
 ];
