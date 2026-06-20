@@ -27,9 +27,19 @@ jobs:
         with:
           version: latest
 
+      - name: Read Supabase project ref
+        id: supabase-project
+        run: |
+          PROJECT_REF="$(grep -E '^project_id = ' supabase/config.toml | sed -E 's/project_id = "([^"]+)"/\1/')"
+          if [ -z "$PROJECT_REF" ]; then
+            echo "::error::project_id nao foi encontrado em supabase/config.toml."
+            exit 1
+          fi
+          echo "project_ref=$PROJECT_REF" >> "$GITHUB_OUTPUT"
+
       - name: Validate Supabase secrets
         run: |
-          for secret_name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_ID SUPABASE_DB_PASSWORD; do
+          for secret_name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD; do
             if [ -z "${!secret_name}" ]; then
               echo "::error::$secret_name nao foi encontrado nos Repository secrets."
               exit 1
@@ -37,14 +47,12 @@ jobs:
           done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Link Supabase project
-        run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+        run: supabase link --project-ref "${{ steps.supabase-project.outputs.project_ref }}" --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push database migrations
