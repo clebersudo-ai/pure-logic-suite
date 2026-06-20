@@ -801,13 +801,16 @@ function DocumentosPage() {
   ), [filtered]);
 
   const stats = useMemo(() => {
-    const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, em_renovacao: 0 };
-    for (const { doc, situacao } of enriched) {
+    const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, sem_validade: 0, em_renovacao: 0 };
+    for (const { doc } of enriched) {
       if (isRenewalProcess(doc.status)) s.em_renovacao++;
-      if (situacao === "ativo") s.ativos++;
-      else if (situacao === "atencao") s.atencao++;
-      else if (situacao === "critico") s.critico++;
-      else if (situacao === "vencido") s.vencido++;
+      if (isNotMonitoredStatus(doc.status)) continue;
+      const situacaoValidade = situacaoValidadeFrom(doc);
+      if (situacaoValidade === "ativo") s.ativos++;
+      else if (situacaoValidade === "atencao") s.atencao++;
+      else if (situacaoValidade === "critico") s.critico++;
+      else if (situacaoValidade === "vencido") s.vencido++;
+      else if (situacaoValidade === "sem_validade") s.sem_validade++;
     }
     return s;
   }, [docs, enriched]);
@@ -953,11 +956,12 @@ function DocumentosPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard icon={ShieldCheck} label="Ativos" value={stats.ativos} tone="emerald" />
         <KpiCard icon={Clock} label="Atenção (45d)" value={stats.atencao} tone="amber" />
         <KpiCard icon={AlertTriangle} label="Crítico (15d)" value={stats.critico} tone="orange" />
         <KpiCard icon={AlertOctagon} label="Vencidos" value={stats.vencido} tone="red" />
+        <KpiCard icon={FileText} label="Sem validade" value={stats.sem_validade} tone="slate" />
         <KpiCard icon={RotateCw} label="Processo de renovação" value={stats.em_renovacao} tone="blue" />
       </div>
 
@@ -1257,7 +1261,7 @@ function DocumentosPage() {
 
 function KpiCard({ icon: Icon, label, value, tone }: {
   icon: typeof FileText; label: string; value: number;
-  tone: "emerald" | "amber" | "orange" | "red" | "blue";
+  tone: "emerald" | "amber" | "orange" | "red" | "blue" | "slate";
 }) {
   const tones: Record<string, string> = {
     emerald: "text-emerald-600 bg-emerald-500/10",
@@ -1265,6 +1269,7 @@ function KpiCard({ icon: Icon, label, value, tone }: {
     orange: "text-orange-600 bg-orange-500/10",
     red: "text-red-600 bg-red-500/10",
     blue: "text-blue-600 bg-blue-500/10",
+    slate: "text-slate-600 bg-slate-500/10",
   };
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm">
