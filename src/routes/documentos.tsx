@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/AppLayout";
@@ -513,6 +513,28 @@ async function gerarDemandasRecorrentes(documentoId: string, payload: Record<str
 }
 
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+const BAR_CHART_COLORS = ["#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#0f766e", "#4f46e5"];
+const CHART_EXPIRED_COLOR = "#dc2626";
+const CHART_DUE_SOON_COLOR = "#facc15";
+
+function chartColorForDeadline(dias: number, index: number) {
+  if (dias < 0) return CHART_EXPIRED_COLOR;
+  if (dias < 30) return CHART_DUE_SOON_COLOR;
+  return BAR_CHART_COLORS[index % BAR_CHART_COLORS.length];
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function chartCellStyle(color?: string): CSSProperties | undefined {
+  return color ? { backgroundColor: hexToRgba(color, 0.8) } : undefined;
+}
 
 function toOptionItem(o: DocumentoOpcao): OptionItem {
   return { value: o.valor, label: o.label || o.valor };
@@ -818,7 +840,7 @@ function DocumentosPage() {
       .slice(0, 10)
       .map((item, index) => ({
         ...item,
-        color: item.dias < 0 ? "#dc2626" : CHART_COLORS[index % CHART_COLORS.length],
+        color: chartColorForDeadline(item.dias, index),
       }));
   }, [filteredOrdenado]);
 
@@ -1085,18 +1107,18 @@ function DocumentosPage() {
                 ? Array.from(new Set<Situacao>([situacaoValidadeFrom(doc), situacao]))
                 : [situacao];
               const corGrafico = corGraficoPorDocumento.get(doc.id);
+              const estiloCelulaGrafico = chartCellStyle(corGrafico);
               return (
                 <TableRow
                   key={doc.id}
                   className="cursor-pointer"
                   style={corGrafico ? {
                     boxShadow: `inset 4px 0 ${corGrafico}`,
-                    backgroundColor: `color-mix(in srgb, ${corGrafico} 80%, hsl(var(--background)))`,
                   } : undefined}
                   onClick={() => setSelected(doc)}
                 >
-                  <TableCell className="text-sm">{doc.subcategoria ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm" style={estiloCelulaGrafico}>{doc.subcategoria ?? "—"}</TableCell>
+                  <TableCell style={estiloCelulaGrafico}>
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
                         <FileText className="h-4 w-4" />
@@ -1114,13 +1136,13 @@ function DocumentosPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm">{doc.categoria ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm" style={estiloCelulaGrafico}>{doc.categoria ?? "—"}</TableCell>
+                  <TableCell style={estiloCelulaGrafico}>
                     <div className="text-sm">{doc.empresa ?? "—"}</div>
                     <div className="text-xs text-muted-foreground">{doc.unidade ?? "—"}</div>
                   </TableCell>
-                  <TableCell className="text-sm">{doc.responsavel ?? "—"}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-sm" style={estiloCelulaGrafico}>{doc.responsavel ?? "—"}</TableCell>
+                  <TableCell style={estiloCelulaGrafico}>
                     <div className="text-sm">{fmtDate(doc.data_validade)}</div>
                     {dias != null && (
                       <div className="text-xs text-muted-foreground">
@@ -1133,13 +1155,13 @@ function DocumentosPage() {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell style={estiloCelulaGrafico}>
                     <Badge variant="outline" className={`gap-1 ${CRITICIDADE_CLASSES[doc.criticidade] || "bg-muted text-muted-foreground"}`}>
                       {doc.criticidade === "critica" && <AlertOctagon className="h-3 w-3 text-red-600 animate-bounce" />}
                       {CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell style={estiloCelulaGrafico}>
                     <div className="flex flex-wrap gap-1.5">
                       {situacoes.map(status => {
                         const meta = SITUACAO_META[status];
@@ -1152,7 +1174,7 @@ function DocumentosPage() {
                       })}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right" style={estiloCelulaGrafico}>
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelected(doc); }}>
                         <Eye className="h-4 w-4" /> Abrir
