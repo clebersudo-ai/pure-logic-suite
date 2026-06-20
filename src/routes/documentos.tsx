@@ -537,7 +537,7 @@ async function gerarDemandasRecorrentes(documentoId: string, payload: Record<str
 }
 
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
-const BAR_CHART_COLORS = ["#2563eb", "#16a34a", "#0891b2", "#db2777", "#0ea5e9", "#14b8a6", "#22c55e", "#06b6d4"];
+const BAR_CHART_COLORS = ["#2563eb", "#16a34a", "#0891b2", "#0ea5e9", "#14b8a6", "#22c55e", "#06b6d4", "#38bdf8"];
 const CHART_EXPIRED_COLOR = "#dc2626";
 const CHART_DUE_SOON_COLOR = "#facc15";
 
