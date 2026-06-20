@@ -56,7 +56,21 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Push database migrations
+        id: push-migrations
+        continue-on-error: true
         run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Apply Laboratorio migration fallback
+        if: steps.push-migrations.outcome == 'failure'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          PGPASSWORD="$SUPABASE_DB_PASSWORD" psql \
+            "host=db.${{ steps.supabase-project.outputs.project_ref }}.supabase.co port=5432 dbname=postgres user=postgres sslmode=require" \
+            -v ON_ERROR_STOP=1 \
+            -f supabase/migrations/20260620170000_add_laboratorio_amostras.sql
+        env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

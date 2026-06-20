@@ -24,30 +24,74 @@ CREATE TABLE IF NOT EXISTS public.laboratorio_amostras (
 
 ALTER TABLE public.laboratorio_amostras ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Laboratorio amostras read"
-ON public.laboratorio_amostras
-FOR SELECT
-TO authenticated
-USING (public.has_any_role(auth.uid()));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'laboratorio_amostras'
+      AND policyname = 'Laboratorio amostras read'
+  ) THEN
+    CREATE POLICY "Laboratorio amostras read"
+    ON public.laboratorio_amostras
+    FOR SELECT
+    TO authenticated
+    USING (public.has_any_role(auth.uid()));
+  END IF;
+END;
+$$;
 
-CREATE POLICY "Laboratorio amostras insert"
-ON public.laboratorio_amostras
-FOR INSERT
-TO authenticated
-WITH CHECK (public.has_any_role(auth.uid()));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'laboratorio_amostras'
+      AND policyname = 'Laboratorio amostras insert'
+  ) THEN
+    CREATE POLICY "Laboratorio amostras insert"
+    ON public.laboratorio_amostras
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (public.has_any_role(auth.uid()));
+  END IF;
+END;
+$$;
 
-CREATE POLICY "Laboratorio amostras update"
-ON public.laboratorio_amostras
-FOR UPDATE
-TO authenticated
-USING (public.has_any_role(auth.uid()))
-WITH CHECK (public.has_any_role(auth.uid()));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'laboratorio_amostras'
+      AND policyname = 'Laboratorio amostras update'
+  ) THEN
+    CREATE POLICY "Laboratorio amostras update"
+    ON public.laboratorio_amostras
+    FOR UPDATE
+    TO authenticated
+    USING (public.has_any_role(auth.uid()))
+    WITH CHECK (public.has_any_role(auth.uid()));
+  END IF;
+END;
+$$;
 
-CREATE POLICY "Laboratorio amostras delete"
-ON public.laboratorio_amostras
-FOR DELETE
-TO authenticated
-USING (public.has_role(auth.uid(), 'administrador'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'laboratorio_amostras'
+      AND policyname = 'Laboratorio amostras delete'
+  ) THEN
+    CREATE POLICY "Laboratorio amostras delete"
+    ON public.laboratorio_amostras
+    FOR DELETE
+    TO authenticated
+    USING (public.has_role(auth.uid(), 'administrador'));
+  END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.set_laboratorio_amostras_updated_at()
 RETURNS TRIGGER
