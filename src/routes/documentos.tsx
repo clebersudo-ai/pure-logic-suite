@@ -269,10 +269,10 @@ function BarTextLabel({ x, y, height, value }: { x?: number; y?: number; height?
       x={x + 8}
       y={y + height / 2}
       dy="0.35em"
-      fill="#fff"
+      fill="#000"
       fontSize={10}
       fontWeight={600}
-      style={{ paintOrder: "stroke", stroke: "rgba(0, 0, 0, 0.65)", strokeWidth: 2 }}
+      style={{ paintOrder: "stroke", stroke: "rgba(255, 255, 255, 0.85)", strokeWidth: 2 }}
     >
       {value}
     </text>
@@ -513,7 +513,7 @@ async function gerarDemandasRecorrentes(documentoId: string, payload: Record<str
 }
 
 const CHART_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
-const BAR_CHART_COLORS = ["#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777", "#65a30d", "#0f766e", "#4f46e5"];
+const BAR_CHART_COLORS = ["#2563eb", "#16a34a", "#0891b2", "#db2777", "#0ea5e9", "#14b8a6", "#22c55e", "#06b6d4"];
 const CHART_EXPIRED_COLOR = "#dc2626";
 const CHART_DUE_SOON_COLOR = "#facc15";
 
@@ -994,14 +994,14 @@ function DocumentosPage() {
                         type="number"
                         dataKey="diasGrafico"
                         allowDecimals={false}
-                        tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                        label={{ value: "dias", position: "insideBottom", offset: -12, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        tick={{ fontSize: 11, fill: "#000" }}
+                        label={{ value: "dias", position: "insideBottom", offset: -12, fontSize: 11, fill: "#000" }}
                       />
-                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: "#000" }} />
                       <Bar dataKey="diasGrafico" radius={[0, 4, 4, 0]}>
                         <LabelList dataKey="barLabel" content={<BarTextLabel />} />
                         {porVencimento.map(item => (
-                          <Cell key={item.key} fill={item.color} />
+                          <Cell key={item.key} fill={hexToRgba(item.color, 0.5)} />
                         ))}
                       </Bar>
                     </BarChart>
