@@ -207,7 +207,14 @@ function situacaoFrom(d: Documento, hasProtocolo: boolean): Situacao {
 }
 
 function situacaoValidadeFrom(d: Documento): Situacao {
-  if (!d.data_validade) return "sem_validade";
+  if (!d.data_validade) {
+    const prazo = prazoEfetivoDocumento(d, null);
+    if (!prazo) return "sem_validade";
+    if (prazo.dias < 0) return "vencido";
+    if (prazo.dias <= 15) return "critico";
+    if (prazo.dias <= 45) return "atencao";
+    return "ativo";
+  }
   if (!d.renovacao_obrigatoria) return "ativo";
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   const validade = new Date(d.data_validade + "T00:00:00");
@@ -215,6 +222,15 @@ function situacaoValidadeFrom(d: Documento): Situacao {
   if (dias < 0) return "vencido";
   if (dias <= 15) return "critico";
   if (dias <= 45) return "atencao";
+  return "ativo";
+}
+
+function situacaoPrazoFrom(doc: Documento, diasValidade: number | null): Situacao {
+  const prazo = prazoEfetivoDocumento(doc, diasValidade);
+  if (!prazo) return "sem_validade";
+  if (prazo.dias < 0) return "vencido";
+  if (prazo.dias <= 15) return "critico";
+  if (prazo.dias <= 45) return "atencao";
   return "ativo";
 }
 
@@ -250,12 +266,22 @@ function diasAteData(data: string | null) {
   return Math.ceil((alvo.getTime() - hoje.getTime()) / 86400000);
 }
 
+function proximaAtualizacaoEfetiva(doc: Documento) {
+  if (!doc.atualizacao_recorrente) return null;
+  return doc.proxima_atualizacao || calcularProximaAtualizacao({
+    atualizacao_recorrente: doc.atualizacao_recorrente,
+    recorrencia_tipo: doc.recorrencia_tipo,
+    recorrencia_dia_base: doc.recorrencia_dia_base,
+    recorrencia_mensal_modo: doc.recorrencia_mensal_modo,
+  }, doc.created_at) || null;
+}
+
 function prazoEfetivoDocumento(doc: Documento, diasValidade: number | null) {
   const prazos: Array<{ dias: number; tipo: "validade" | "atualizacao" }> = [];
   if (doc.renovacao_obrigatoria && diasValidade != null) {
     prazos.push({ dias: diasValidade, tipo: "validade" });
   }
-  const diasAtualizacao = doc.atualizacao_recorrente ? diasAteData(doc.proxima_atualizacao) : null;
+  const diasAtualizacao = diasAteData(proximaAtualizacaoEfetiva(doc));
   if (diasAtualizacao != null) {
     prazos.push({ dias: diasAtualizacao, tipo: "atualizacao" });
   }
@@ -319,8 +345,6 @@ function toggleValidadeIndeterminada<T extends ValidadeIndeterminadaState>(state
     validade_indeterminada: enabled,
     ...(enabled ? {
       data_validade: "",
-      atualizacao_recorrente: false,
-      proxima_atualizacao: "",
       renovacao_obrigatoria: false,
     } : {}),
   };
@@ -758,6 +782,7 @@ function DocumentosPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return enriched.filter(({ doc, situacao, dias }) => {
+      const situacaoPrazo = situacaoPrazoFrom(doc, dias);
       if (fMinhasDemandas) {
         const isDocResponsavel = isMe(doc.responsavel);
         const temDemandaMinha = demandas.some(dem => dem.documento_id === doc.id && dem.status !== "concluida" && isMe(dem.responsavel));
@@ -772,19 +797,19 @@ function DocumentosPage() {
       if (fSubcategoria !== "__all" && (doc.subcategoria ?? "") !== fSubcategoria) return false;
       if (fOrgao !== "__all" && doc.orgao_emissor !== fOrgao) return false;
       if (fResponsavel !== "__all" && doc.responsavel !== fResponsavel) return false;
-      if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao) return false;
+      if (fSituacao !== "__all" && doc.status !== fSituacao && situacao !== fSituacao && situacaoPrazo !== fSituacao) return false;
       if (fVencimento !== "__all") {
-        if (dias == null) return false;
-        if (!doc.renovacao_obrigatoria) return false;
-        if (fVencimento === "vencido") { if (dias >= 0) return false; }
+        const prazo = prazoEfetivoDocumento(doc, dias);
+        if (!prazo) return false;
+        if (fVencimento === "vencido") { if (prazo.dias >= 0) return false; }
         else {
           const limite = Number(fVencimento);
-          if (!Number.isFinite(limite) || dias < 0 || dias > limite) return false;
+          if (!Number.isFinite(limite) || prazo.dias < 0 || prazo.dias > limite) return false;
         }
       }
       if (fRecorrencia !== "__all") {
         if (!doc.atualizacao_recorrente) return false;
-        const diasAtualizacao = diasAteData(doc.proxima_atualizacao);
+        const diasAtualizacao = diasAteData(proximaAtualizacaoEfetiva(doc));
         if (fRecorrencia === "atrasadas" && (diasAtualizacao == null || diasAtualizacao >= 0)) return false;
         if (fRecorrencia === "30" && (diasAtualizacao == null || diasAtualizacao < 0 || diasAtualizacao > 30)) return false;
       }
@@ -802,15 +827,15 @@ function DocumentosPage() {
 
   const stats = useMemo(() => {
     const s = { total: docs.length, ativos: 0, atencao: 0, critico: 0, vencido: 0, sem_validade: 0, em_renovacao: 0 };
-    for (const { doc } of enriched) {
+    for (const { doc, dias } of enriched) {
       if (isRenewalProcess(doc.status)) s.em_renovacao++;
       if (isNotMonitoredStatus(doc.status)) continue;
-      const situacaoValidade = situacaoValidadeFrom(doc);
-      if (situacaoValidade === "ativo") s.ativos++;
-      else if (situacaoValidade === "atencao") s.atencao++;
-      else if (situacaoValidade === "critico") s.critico++;
-      else if (situacaoValidade === "vencido") s.vencido++;
-      else if (situacaoValidade === "sem_validade") s.sem_validade++;
+      const situacaoPrazo = situacaoPrazoFrom(doc, dias);
+      if (situacaoPrazo === "ativo") s.ativos++;
+      else if (situacaoPrazo === "atencao") s.atencao++;
+      else if (situacaoPrazo === "critico") s.critico++;
+      else if (situacaoPrazo === "vencido") s.vencido++;
+      else if (situacaoPrazo === "sem_validade") s.sem_validade++;
     }
     return s;
   }, [docs, enriched]);
@@ -894,14 +919,15 @@ function DocumentosPage() {
   }, [docs, fCategoria]);
 
   const vitaisAlertas = useMemo(() => {
-    return enriched.filter(({ doc, dias }) => {
-      if (isNotMonitoredStatus(doc.status)) return false;
+    return enriched.flatMap(({ doc, dias }) => {
+      if (isNotMonitoredStatus(doc.status)) return [];
+      const prazo = prazoEfetivoDocumento(doc, dias);
       const orgao = (doc.orgao_emissor ?? "").toLowerCase();
       const subcat = (doc.subcategoria ?? "").toLowerCase();
       const isVitalOrgao = ["anvisa", "cetesb", "policia federal", "policia civil", "exército", "exercito"].some(o => orgao.includes(o) || subcat.includes(o));
       const isHighCriticidade = doc.criticidade === "alta" || doc.criticidade === "critica";
-      const expiradoOuProximo = dias != null && dias <= 45;
-      return (isVitalOrgao || isHighCriticidade) && expiradoOuProximo;
+      const expiradoOuProximo = prazo != null && prazo.dias <= 45;
+      return (isVitalOrgao || isHighCriticidade) && expiradoOuProximo ? [{ doc, dias: prazo.dias, tipoPrazo: prazo.tipo }] : [];
     });
   }, [enriched]);
 
@@ -932,7 +958,7 @@ function DocumentosPage() {
             <h3 className="font-semibold text-sm">Atenção: Licenças Vitais e Documentos Críticos Expirados ou Próximos ao Vencimento</h3>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-            {vitaisAlertas.map(({ doc, dias }) => (
+            {vitaisAlertas.map(({ doc, dias, tipoPrazo }) => (
               <div key={doc.id} className="flex flex-col gap-1 rounded-lg border border-red-100 bg-white p-3 shadow-xs">
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-xs text-slate-800 truncate" title={doc.nome}>{doc.nome}</span>
@@ -944,7 +970,9 @@ function DocumentosPage() {
                   Órgão: {doc.orgao_emissor ?? "—"} · Responsável: {doc.responsavel ?? "—"}
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs">
-                  <span className="font-medium text-slate-700">Validade: {fmtDate(doc.data_validade)}</span>
+                  <span className="font-medium text-slate-700">
+                    {tipoPrazo === "atualizacao" ? "Atualização" : "Validade"}: {fmtDate(tipoPrazo === "atualizacao" ? proximaAtualizacaoEfetiva(doc) : doc.data_validade)}
+                  </span>
                   <span className={`font-bold ${dias != null && dias < 0 ? "text-red-600 animate-pulse" : "text-amber-600"}`}>
                     {dias != null && dias < 0 ? `Vencido há ${Math.abs(dias)}d` : `Vence em ${dias}d`}
                   </span>
@@ -1112,9 +1140,14 @@ function DocumentosPage() {
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={9}><EmptyState label="Nenhum documento encontrado" /></TableCell></TableRow>
             ) : filteredOrdenado.map(({ doc, situacao, dias }) => {
+              const prazoTabela = prazoEfetivoDocumento(doc, dias);
+              const proximaAtualizacao = proximaAtualizacaoEfetiva(doc);
+              const situacaoPrazo = situacaoPrazoFrom(doc, dias);
               const situacoes = isRenewalPhase(doc.status) && doc.status !== "licenca_renovada"
-                ? Array.from(new Set<Situacao>([situacaoValidadeFrom(doc), situacao]))
-                : [situacao];
+                ? Array.from(new Set<Situacao>([situacaoPrazo, situacao]))
+                : isNotMonitoredStatus(doc.status)
+                  ? [situacao]
+                  : [situacaoPrazo];
               const corGrafico = corGraficoPorDocumento.get(doc.id);
               const estiloCelulaGrafico = chartCellStyle(corGrafico);
               return (
@@ -1152,15 +1185,21 @@ function DocumentosPage() {
                   </TableCell>
                   <TableCell className="text-sm" style={estiloCelulaGrafico}>{doc.responsavel ?? "—"}</TableCell>
                   <TableCell style={estiloCelulaGrafico}>
-                    <div className="text-sm">{fmtDate(doc.data_validade)}</div>
-                    {dias != null && (
+                    <div className="text-sm">
+                      {doc.data_validade
+                        ? fmtDate(doc.data_validade)
+                        : doc.atualizacao_recorrente
+                          ? fmtDate(proximaAtualizacao)
+                          : "—"}
+                    </div>
+                    {prazoTabela && (
                       <div className="text-xs text-muted-foreground">
-                        {dias < 0 ? `${Math.abs(dias)}d em atraso` : `${dias}d restantes`}
+                        {prazoTabela.dias < 0 ? `${Math.abs(prazoTabela.dias)}d em atraso` : `${prazoTabela.dias}d restantes`}
                       </div>
                     )}
-                    {doc.atualizacao_recorrente && (
+                    {doc.atualizacao_recorrente && proximaAtualizacao && (
                       <div className="text-xs text-muted-foreground">
-                        Próx. atualização: {fmtDate(doc.proxima_atualizacao)}
+                        Próx. atualização: {fmtDate(proximaAtualizacao)}
                       </div>
                     )}
                   </TableCell>
@@ -1334,7 +1373,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
   });
 
   useEffect(() => {
-    setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s, documento?.created_at) }));
+    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s, documento?.created_at) }));
   }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo, documento?.created_at]);
 
   useEffect(() => {
@@ -1415,6 +1454,10 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
 
   async function save() {
     if (!f.nome.trim()) { toast.error("Informe o nome do documento"); return; }
+    if (f.atualizacao_recorrente && !f.proxima_atualizacao) {
+      toast.error("Documento recorrente precisa ter próxima atualização calculada.");
+      return;
+    }
     setSaving(true);
     const payload: any = {
       nome: f.nome,
@@ -1427,12 +1470,12 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
       responsavel: f.responsavel || null,
       data_emissao: f.data_emissao || null,
       data_validade: f.validade_indeterminada ? null : f.data_validade || null,
-      atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
+      atualizacao_recorrente: f.atualizacao_recorrente,
       intervalo_atualizacao_dias: null,
-      recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-      recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-      recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-      proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+      recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+      recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+      recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+      proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
       renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
       criticidade: f.criticidade,
       status: f.status,
@@ -1596,9 +1639,9 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <Label className="text-sm font-medium">Atualização recorrente</Label>
               <p className="text-xs text-muted-foreground">Use para mapas, exames e documentos que precisam ser atualizados periodicamente.</p>
             </div>
-            <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+            <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
           </div>
-          {!f.validade_indeterminada && f.atualizacao_recorrente && (
+          {f.atualizacao_recorrente && (
             <>
               <FormField label="Repetir em:">
                 <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
@@ -2229,7 +2272,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
   });
 
   useEffect(() => {
-    setF(s => ({ ...s, proxima_atualizacao: s.validade_indeterminada ? "" : calcularProximaAtualizacao(s) }));
+    setF(s => ({ ...s, proxima_atualizacao: calcularProximaAtualizacao(s) }));
   }, [f.validade_indeterminada, f.atualizacao_recorrente, f.recorrencia_tipo, f.recorrencia_dia_base, f.recorrencia_mensal_modo]);
 
   useEffect(() => {
@@ -2332,6 +2375,10 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
   async function confirm() {
     if (!file) { toast.error("Nenhum arquivo selecionado"); return; }
     if (!f.nome.trim()) { toast.error("Informe o nome do documento"); return; }
+    if (f.atualizacao_recorrente && !f.proxima_atualizacao) {
+      toast.error("Documento recorrente precisa ter próxima atualização calculada.");
+      return;
+    }
     setSaving(true);
     try {
       // Buscar nome do usuário
@@ -2406,12 +2453,12 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
           data_validade: f.validade_indeterminada ? null : f.data_validade || null,
-          atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
+          atualizacao_recorrente: f.atualizacao_recorrente,
           intervalo_atualizacao_dias: null,
-          recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-          recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-          recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-          proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
@@ -2460,12 +2507,12 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
           responsavel: f.responsavel || null,
           data_emissao: f.data_emissao || null,
           data_validade: f.validade_indeterminada ? null : f.data_validade || null,
-          atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
+          atualizacao_recorrente: f.atualizacao_recorrente,
           intervalo_atualizacao_dias: null,
-          recorrencia_tipo: !f.validade_indeterminada && f.atualizacao_recorrente ? f.recorrencia_tipo : null,
-          recorrencia_dia_base: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
-          recorrencia_mensal_modo: !f.validade_indeterminada && f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
-          proxima_atualizacao: !f.validade_indeterminada && f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
+          recorrencia_tipo: f.atualizacao_recorrente ? f.recorrencia_tipo : null,
+          recorrencia_dia_base: f.atualizacao_recorrente && f.recorrencia_tipo !== "diaria" ? Number(f.recorrencia_dia_base) || null : null,
+          recorrencia_mensal_modo: f.atualizacao_recorrente && f.recorrencia_tipo === "mensal" ? f.recorrencia_mensal_modo : null,
+          proxima_atualizacao: f.atualizacao_recorrente ? f.proxima_atualizacao || null : null,
           renovacao_obrigatoria: f.validade_indeterminada ? false : f.renovacao_obrigatoria,
           criticidade: f.criticidade,
           observacoes: f.observacoes || null,
@@ -2503,7 +2550,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
       const demandaGerada = await gerarDemandasRecorrentes(docId, {
         nome: f.nome,
         responsavel: f.responsavel || null,
-        atualizacao_recorrente: f.validade_indeterminada ? false : f.atualizacao_recorrente,
+        atualizacao_recorrente: f.atualizacao_recorrente,
         recorrencia_tipo: f.recorrencia_tipo,
         recorrencia_dia_base: Number(f.recorrencia_dia_base) || null,
         recorrencia_mensal_modo: f.recorrencia_mensal_modo,
@@ -2774,9 +2821,9 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                     <Label className="text-xs">Atualização recorrente</Label>
                     <p className="text-[11px] text-muted-foreground">Para mapas, exames e documentos periódicos.</p>
                   </div>
-                  <Switch disabled={f.validade_indeterminada} checked={!f.validade_indeterminada && f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
+                  <Switch checked={f.atualizacao_recorrente} onCheckedChange={(v) => setF(s => ({ ...s, atualizacao_recorrente: v }))} />
                 </div>
-                {!f.validade_indeterminada && f.atualizacao_recorrente && (
+                {f.atualizacao_recorrente && (
                   <>
                     <FormField label="Repetir em:">
                       <Select value={f.recorrencia_tipo} onValueChange={(v) => setF(s => ({ ...s, recorrencia_tipo: v }))}>
