@@ -373,69 +373,6 @@ export type Database = {
           },
         ]
       }
-      laboratorio_amostras: {
-        Row: {
-          codigo: string
-          created_at: string
-          criado_por: string | null
-          especificacao: string | null
-          etapa: string
-          id: string
-          lote: string | null
-          material: string
-          metodo: string | null
-          observacoes: string | null
-          origem: string | null
-          parecer: string | null
-          prazo_resposta: string | null
-          prioridade: string
-          responsavel: string | null
-          resultado: string | null
-          status: string
-          updated_at: string
-        }
-        Insert: {
-          codigo: string
-          created_at?: string
-          criado_por?: string | null
-          especificacao?: string | null
-          etapa?: string
-          id?: string
-          lote?: string | null
-          material: string
-          metodo?: string | null
-          observacoes?: string | null
-          origem?: string | null
-          parecer?: string | null
-          prazo_resposta?: string | null
-          prioridade?: string
-          responsavel?: string | null
-          resultado?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Update: {
-          codigo?: string
-          created_at?: string
-          criado_por?: string | null
-          especificacao?: string | null
-          etapa?: string
-          id?: string
-          lote?: string | null
-          material?: string
-          metodo?: string | null
-          observacoes?: string | null
-          origem?: string | null
-          parecer?: string | null
-          prazo_resposta?: string | null
-          prioridade?: string
-          responsavel?: string | null
-          resultado?: string | null
-          status?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       materias_primas: {
         Row: {
           codigo_interno: string
@@ -648,27 +585,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_documento_categorias: {
-        Row: {
-          categoria: string
-          created_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          categoria: string
-          created_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          categoria?: string
-          created_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
           id: string
@@ -703,10 +619,6 @@ export type Database = {
         }[]
       }
       has_any_role: { Args: { _user_id: string }; Returns: boolean }
-      has_documento_categoria_access: {
-        Args: { _categoria: string; _user_id: string }
-        Returns: boolean
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
