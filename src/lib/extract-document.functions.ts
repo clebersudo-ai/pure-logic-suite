@@ -41,9 +41,8 @@ REGRAS:
 
 const NVIDIA_MODEL = "meta/llama-3.2-90b-vision-instruct";
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_URL = (key: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+const GEMINI_MODEL = "google/gemini-2.5-flash";
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 const NVIDIA_IMAGE_TYPES = new Set([
   "image/png", "image/jpeg", "image/jpg", "image/webp",
@@ -112,44 +111,47 @@ async function extractWithGemini(
   apiKey: string,
   data: { base64: string; mimeType: string; fileName?: string },
 ): Promise<ExtractedDoc> {
-  const res = await fetch(GEMINI_URL(apiKey), {
+  const userPrompt = `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda APENAS com JSON válido, omitindo campos não encontrados.`;
+
+  const res = await fetch(LOVABLE_AI_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Lovable-API-Key": apiKey,
+    },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [
+      model: GEMINI_MODEL,
+      temperature: 0.2,
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM },
         {
           role: "user",
-          parts: [
+          content: [
+            { type: "text", text: userPrompt },
             {
-              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda APENAS com JSON válido, omitindo campos não encontrados.`,
+              type: "image_url",
+              image_url: { url: `data:${data.mimeType};base64,${data.base64}` },
             },
-            { inlineData: { mimeType: data.mimeType, data: data.base64 } },
           ],
         },
       ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-      },
     }),
   });
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    console.error("Gemini API error", res.status, txt.slice(0, 500));
-    if (res.status === 401 || res.status === 403) throw new Error("Chave GEMINI_API_KEY inválida.");
-    if (res.status === 429) throw new Error("Limite Gemini atingido. Tente novamente em instantes.");
+    console.error("Lovable AI (Gemini) error", res.status, txt.slice(0, 500));
+    if (res.status === 401 || res.status === 403) throw new Error("LOVABLE_API_KEY inválida.");
+    if (res.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
+    if (res.status === 402) throw new Error("Créditos Lovable AI esgotados. Adicione créditos no workspace.");
     throw new Error(`Falha Gemini (${res.status}): ${txt.slice(0, 200)}`);
   }
 
   const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts;
-  const text = Array.isArray(parts)
-    ? parts.map((p: { text?: string }) => p?.text ?? "").join("")
-    : "";
-  return text ? parseExtractedJson(text) : {};
+  const content = json?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? parseExtractedJson(content) : {};
 }
 
 export const extractDocumentMetadata = createServerFn({ method: "POST" })
@@ -159,7 +161,7 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const nvidiaKey = process.env.NVIDIA_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const lovableKey = process.env.LOVABLE_API_KEY;
     const mime = data.mimeType.toLowerCase();
     const isNvidiaImage = NVIDIA_IMAGE_TYPES.has(mime);
 
@@ -168,18 +170,18 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
         try {
           return await extractWithNvidia(nvidiaKey, data);
         } catch (err) {
-          if (!geminiKey) throw err;
-          console.warn("NVIDIA falhou, tentando Gemini como fallback:", (err as Error).message);
-          return await extractWithGemini(geminiKey, data);
+          if (!lovableKey) throw err;
+          console.warn("NVIDIA falhou, tentando Gemini (Lovable AI) como fallback:", (err as Error).message);
+          return await extractWithGemini(lovableKey, data);
         }
       }
-      if (geminiKey) return await extractWithGemini(geminiKey, data);
-      throw new Error("Configure NVIDIA_API_KEY (ou GEMINI_API_KEY) para analisar imagens.");
+      if (lovableKey) return await extractWithGemini(lovableKey, data);
+      throw new Error("Configure NVIDIA_API_KEY ou LOVABLE_API_KEY para analisar imagens.");
     }
 
-    // PDFs e demais documentos → Gemini
-    if (!geminiKey) {
-      throw new Error("GEMINI_API_KEY ausente. Necessária para analisar PDFs e documentos não-imagem.");
+    // PDFs e demais documentos → Gemini via Lovable AI
+    if (!lovableKey) {
+      throw new Error("LOVABLE_API_KEY ausente. Necessária para analisar PDFs e documentos.");
     }
-    return await extractWithGemini(geminiKey, data);
+    return await extractWithGemini(lovableKey, data);
   });
