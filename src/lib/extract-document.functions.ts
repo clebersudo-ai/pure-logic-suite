@@ -65,7 +65,17 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
     const apiKey = process.env.NVIDIA_API_KEY;
     if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
 
-    const dataUrl = `data:${data.mimeType};base64,${data.base64}`;
+    if (!data.mimeType.startsWith("image/")) {
+      throw new Error("A NVIDIA Vision aceita apenas imagens (PNG/JPG/WEBP). Converta PDFs em imagem antes de enviar.");
+    }
+
+    // NVIDIA Llama 3.2 Vision: limite de ~180KB para imagem inline em base64
+    const sizeBytes = Math.floor((data.base64.length * 3) / 4);
+    if (sizeBytes > 180_000) {
+      throw new Error(`Imagem muito grande (${Math.round(sizeBytes / 1024)}KB). Limite NVIDIA: 180KB. Reduza a resolução antes de enviar.`);
+    }
+
+    const userPrompt = `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda apenas com JSON válido, omitindo campos não encontrados. <img src="data:${data.mimeType};base64,${data.base64}" />`;
 
     const body = {
       model: MODEL,
@@ -73,16 +83,7 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
       temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda apenas com JSON válido, omitindo campos não encontrados.`,
-            },
-            { type: "image_url", image_url: { url: dataUrl } },
-          ],
-        },
+        { role: "user", content: userPrompt },
       ],
     };
 
@@ -98,8 +99,10 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
+      console.error("NVIDIA API error", res.status, txt.slice(0, 500));
+      if (res.status === 401) throw new Error("Chave NVIDIA_API_KEY inválida. Gere uma nova em build.nvidia.com.");
       if (res.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
-      if (res.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
+      if (res.status === 402) throw new Error("Créditos NVIDIA esgotados.");
       throw new Error(`Falha na análise IA (${res.status}): ${txt.slice(0, 200)}`);
     }
 
