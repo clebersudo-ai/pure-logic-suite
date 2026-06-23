@@ -161,7 +161,7 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const nvidiaKey = process.env.NVIDIA_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY;
+    const lovableKey = process.env.LOVABLE_API_KEY;
     const mime = data.mimeType.toLowerCase();
     const isNvidiaImage = NVIDIA_IMAGE_TYPES.has(mime);
 
@@ -170,18 +170,18 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
         try {
           return await extractWithNvidia(nvidiaKey, data);
         } catch (err) {
-          if (!geminiKey) throw err;
-          console.warn("NVIDIA falhou, tentando Gemini como fallback:", (err as Error).message);
-          return await extractWithGemini(geminiKey, data);
+          if (!lovableKey) throw err;
+          console.warn("NVIDIA falhou, tentando Gemini (Lovable AI) como fallback:", (err as Error).message);
+          return await extractWithGemini(lovableKey, data);
         }
       }
-      if (geminiKey) return await extractWithGemini(geminiKey, data);
-      throw new Error("Configure NVIDIA_API_KEY (ou GEMINI_API_KEY) para analisar imagens.");
+      if (lovableKey) return await extractWithGemini(lovableKey, data);
+      throw new Error("Configure NVIDIA_API_KEY ou LOVABLE_API_KEY para analisar imagens.");
     }
 
-    // PDFs e demais documentos → Gemini
-    if (!geminiKey) {
-      throw new Error("GEMINI_API_KEY ausente. Necessária para analisar PDFs e documentos não-imagem.");
+    // PDFs e demais documentos → Gemini via Lovable AI
+    if (!lovableKey) {
+      throw new Error("LOVABLE_API_KEY ausente. Necessária para analisar PDFs e documentos.");
     }
-    return await extractWithGemini(geminiKey, data);
+    return await extractWithGemini(lovableKey, data);
   });
