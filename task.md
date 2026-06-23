@@ -65,9 +65,9 @@ A árvore de pastas (categorias e subcategorias) no arquivo `src/routes/document
 
 ### 2. Ajustes nos Campos e Formulários (Interface)
 
-- [ ] **Exposição da Criticidade:** Garantir que o campo de criticidade (Baixa, Média, Alta, Crítica) esteja bem visível no formulário de cadastro, no dashboard e na lista principal de documentos, destacando licenças vitais que não podem vencer (como ANVISA, CETESB e Polícia Federal).
-- [ ] **Responsável pela Renovação:** Garantir a existência do campo para selecionar o responsável ou setor da renovação (opções recomendadas: contador, consultoria ambiental, químico, RH, etc.) no formulário e na listagem.
-- [ ] **Configuração do MAPA de Produtos Controlados:**
+- [x] **Exposição da Criticidade:** Garantir que o campo de criticidade (Baixa, Média, Alta, Crítica) esteja bem visível no formulário de cadastro, no dashboard e na lista principal de documentos, destacando licenças vitais que não podem vencer (como ANVISA, CETESB e Polícia Federal).
+- [x] **Responsável pela Renovação:** Garantir a existência do campo para selecionar o responsável ou setor da renovação (opções recomendadas: contador, consultoria ambiental, químico, RH, etc.) no formulário e na listagem.
+- [x] **Configuração do MAPA de Produtos Controlados:**
   - Garantir que ao selecionar "MAPA Produtos Controlados" como subcategoria, o formulário ofereça o campo de "Órgão Vinculado" (Polícia Civil, Polícia Federal, Exército, CADRI, etc.) para evitar repetições no nome do documento.
   - Implementar/revisar o controle de prazos de entrega dos mapas conforme o órgão correspondente (ex: mensal, bimensal, trimestral).
 

@@ -36,7 +36,24 @@ REGRAS:
 - "empresa" é a razão social vinculada ao documento.
 - Datas SEMPRE no formato ISO YYYY-MM-DD.
 - Se um campo não estiver no documento, OMITA (não invente).
-- "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.`;
+- "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.
+- Responda APENAS com um JSON válido, sem markdown e sem explicações.`;
+
+const NVIDIA_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+
+function parseExtractedJson(content: string): ExtractedDoc {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim();
+  const candidate = fenced || trimmed;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return {};
+  try {
+    return JSON.parse(candidate.slice(start, end + 1)) as ExtractedDoc;
+  } catch {
+    return {};
+  }
+}
 
 export const extractDocumentMetadata = createServerFn({ method: "POST" })
   .inputValidator((d: { base64: string; mimeType: string; fileName?: string }) => {
@@ -44,13 +61,13 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente. Habilite Lovable AI.");
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
 
     const dataUrl = `data:${data.mimeType};base64,${data.base64}`;
 
     const body = {
-      model: "google/gemini-2.5-flash",
+      model: NVIDIA_MODEL,
       messages: [
         { role: "system", content: SYSTEM },
         {
@@ -58,43 +75,37 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
           content: [
             {
               type: "text",
-              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Use a função extract_regulatory_document.`,
+              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}.
+
+Formato obrigatório:
+{
+  "tipo_documento": "uma das opções permitidas",
+  "nome": "título oficial",
+  "numero_documento": "número/protocolo quando existir",
+  "orgao_emissor": "órgão emissor",
+  "categoria": "categoria sugerida",
+  "data_emissao": "YYYY-MM-DD",
+  "data_validade": "YYYY-MM-DD",
+  "empresa": "razão social",
+  "cnpj": "00.000.000/0000-00",
+  "uf": "SP",
+  "responsavel": "responsável técnico/legal",
+  "observacoes": "escopo, restrições e condicionantes"
+}
+
+Omita campos não encontrados.`,
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
       ],
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "extract_regulatory_document",
-            description: "Retorna os metadados extraídos do documento.",
-            parameters: {
-              type: "object",
-              properties: {
-                tipo_documento: { type: "string", description: "Tipo identificado do documento" },
-                nome: { type: "string", description: "Título oficial do documento" },
-                numero_documento: { type: "string", description: "Número/protocolo do documento" },
-                orgao_emissor: { type: "string", description: "Órgão emissor" },
-                categoria: { type: "string", description: "Categoria" },
-                data_emissao: { type: "string", description: "Data de emissão YYYY-MM-DD" },
-                data_validade: { type: "string", description: "Data de validade YYYY-MM-DD" },
-                empresa: { type: "string", description: "Razão social" },
-                cnpj: { type: "string", description: "CNPJ formatado" },
-                uf: { type: "string", description: "Sigla do estado" },
-                responsavel: { type: "string", description: "Responsável técnico/legal" },
-                observacoes: { type: "string", description: "Observações, escopo, restrições" },
-              },
-              additionalProperties: false,
-            },
-          },
-        },
-      ],
-      tool_choice: { type: "function", function: { name: "extract_regulatory_document" } },
+      max_tokens: 2048,
+      temperature: 0.1,
+      top_p: 0.7,
+      stream: false,
     };
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -105,17 +116,12 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      if (res.status === 429) throw new Error("Limite de uso da IA atingido. Tente novamente em instantes.");
-      if (res.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
-      throw new Error(`Falha na análise IA (${res.status}): ${txt.slice(0, 200)}`);
+      if (res.status === 401) throw new Error("Chave NVIDIA inválida ou ausente. Verifique NVIDIA_API_KEY.");
+      if (res.status === 429) throw new Error("Limite gratuito da NVIDIA atingido. Tente novamente em instantes.");
+      throw new Error(`Falha na análise IA NVIDIA (${res.status}): ${txt.slice(0, 200)}`);
     }
 
     const json = await res.json();
-    const call = json?.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call?.function?.arguments) return {} as ExtractedDoc;
-    try {
-      return JSON.parse(call.function.arguments) as ExtractedDoc;
-    } catch {
-      return {} as ExtractedDoc;
-    }
+    const content = json?.choices?.[0]?.message?.content;
+    return typeof content === "string" ? parseExtractedJson(content) : {};
   });

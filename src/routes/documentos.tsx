@@ -153,6 +153,18 @@ const CRITICIDADE_CLASSES: Record<string, string> = {
   critica: "bg-red-50 text-red-700 border-red-200 animate-pulse font-bold",
 };
 
+const MAPA_ORGAOS = ["Policia Civil", "Policia Federal", "Exército", "CADRI", "Outros"];
+const MAPA_RECORRENCIA_POR_ORGAO: Record<string, RecorrenciaTipo> = {
+  "Policia Federal": "mensal",
+  "Policia Civil": "trimestral",
+  "Exército": "trimestral",
+  "CADRI": "bimestral",
+};
+
+function mapaRecorrenciaPorOrgao(orgao: string) {
+  return MAPA_RECORRENCIA_POR_ORGAO[orgao] ?? null;
+}
+
 type Documento = {
   id: string; nome: string; descricao: string | null; categoria: string | null;
   subcategoria: string | null;
@@ -963,7 +975,7 @@ function DocumentosPage() {
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-xs text-slate-800 truncate" title={doc.nome}>{doc.nome}</span>
                   <Badge variant="outline" className={`text-[10px] ${CRITICIDADE_CLASSES[doc.criticidade] || "bg-muted text-muted-foreground"}`}>
-                    {doc.criticidade}
+                    {CRITICIDADES.find(c => c.value === doc.criticidade)?.label ?? doc.criticidade}
                   </Badge>
                 </div>
                 <div className="text-[11px] text-muted-foreground">
@@ -1378,13 +1390,7 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
 
   useEffect(() => {
     if (f.subcategoria === "MAPA Produtos Controlados" && f.orgao_emissor) {
-      const orgao = f.orgao_emissor;
-      let recorrencia = "";
-      if (orgao === "Policia Federal") {
-        recorrencia = "mensal";
-      } else if (orgao === "Policia Civil" || orgao === "Exército") {
-        recorrencia = "trimestral";
-      }
+      const recorrencia = mapaRecorrenciaPorOrgao(f.orgao_emissor);
       if (recorrencia) {
         setF(s => ({
           ...s,
@@ -1593,11 +1599,18 @@ function DocumentoForm({ open, onOpenChange, documento, userId, onSaved, categor
               <SimpleCombo
                 value={f.orgao_emissor}
                 setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))}
-                options={f.subcategoria === "MAPA Produtos Controlados" ? ["Policia Civil", "Policia Federal", "Exército", "CADRI", "Outros"] : orgaos}
+                options={f.subcategoria === "MAPA Produtos Controlados" ? MAPA_ORGAOS : orgaos}
                 placeholder="Selecione…"
               />
             </div>
           </FormField>
+          {f.subcategoria === "MAPA Produtos Controlados" && (
+            <div className="rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-xs text-sky-800 md:col-span-2">
+              Prazo do mapa: {f.orgao_emissor && mapaRecorrenciaPorOrgao(f.orgao_emissor)
+                ? recorrenciaLabel({ recorrencia_tipo: mapaRecorrenciaPorOrgao(f.orgao_emissor), recorrencia_dia_base: Number(f.recorrencia_dia_base) || null, recorrencia_mensal_modo: f.recorrencia_mensal_modo })
+                : "selecione o órgão vinculado para configurar a recorrência."}
+            </div>
+          )}
           <FormField label="Número do documento">
             <Input className={aiCls("numero_documento")} value={f.numero_documento} onChange={(e) => setF(s => ({ ...s, numero_documento: e.target.value }))} />
           </FormField>
@@ -2277,13 +2290,7 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
 
   useEffect(() => {
     if (f.subcategoria === "MAPA Produtos Controlados" && f.orgao_emissor) {
-      const orgao = f.orgao_emissor;
-      let recorrencia = "";
-      if (orgao === "Policia Federal") {
-        recorrencia = "mensal";
-      } else if (orgao === "Policia Civil" || orgao === "Exército") {
-        recorrencia = "trimestral";
-      }
+      const recorrencia = mapaRecorrenciaPorOrgao(f.orgao_emissor);
       if (recorrencia) {
         setF(s => ({
           ...s,
@@ -2775,11 +2782,18 @@ function SmartIntakeDialog({ open, onOpenChange, userId, existing, onSaved, cate
                     <SimpleCombo
                       value={f.orgao_emissor}
                       setValue={(v) => setF(s => ({ ...s, orgao_emissor: v }))}
-                      options={f.subcategoria === "MAPA Produtos Controlados" ? ["Policia Civil", "Policia Federal", "Exército", "CADRI", "Outros"] : orgaos}
+                      options={f.subcategoria === "MAPA Produtos Controlados" ? MAPA_ORGAOS : orgaos}
                       placeholder="Selecione…"
                     />
                   </div>
                 </FormField>
+                {f.subcategoria === "MAPA Produtos Controlados" && (
+                  <div className="col-span-2 rounded-md border border-sky-100 bg-sky-50/70 px-3 py-2 text-xs text-sky-800">
+                    Prazo do mapa: {f.orgao_emissor && mapaRecorrenciaPorOrgao(f.orgao_emissor)
+                      ? recorrenciaLabel({ recorrencia_tipo: mapaRecorrenciaPorOrgao(f.orgao_emissor), recorrencia_dia_base: Number(f.recorrencia_dia_base) || null, recorrencia_mensal_modo: f.recorrencia_mensal_modo })
+                      : "selecione o órgão vinculado para configurar a recorrência."}
+                  </div>
+                )}
                 <FormField label="Empresa / Razão social">
                   <Input className={cls("empresa")} value={f.empresa} onChange={(e) => setF(s => ({ ...s, empresa: e.target.value }))} />
                 </FormField>
