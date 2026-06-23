@@ -39,8 +39,15 @@ REGRAS:
 - "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.
 - Responda APENAS com um JSON válido, sem markdown e sem explicações.`;
 
-const MODEL = "meta/llama-3.2-90b-vision-instruct";
+const NVIDIA_MODEL = "meta/llama-3.2-90b-vision-instruct";
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_URL = (key: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+
+const NVIDIA_IMAGE_TYPES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp",
+]);
 
 function parseExtractedJson(content: string): ExtractedDoc {
   const trimmed = content.trim();
@@ -56,57 +63,123 @@ function parseExtractedJson(content: string): ExtractedDoc {
   }
 }
 
-export const extractDocumentMetadata = createServerFn({ method: "POST" })
-  .inputValidator((d: { base64: string; mimeType: string; fileName?: string }) => {
-    if (!d?.base64 || !d?.mimeType) throw new Error("Arquivo inválido");
-    return d;
-  })
-  .handler(async ({ data }) => {
-    const apiKey = process.env.NVIDIA_API_KEY;
-    if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
+async function extractWithNvidia(
+  apiKey: string,
+  data: { base64: string; mimeType: string; fileName?: string },
+): Promise<ExtractedDoc> {
+  const sizeBytes = Math.floor((data.base64.length * 3) / 4);
+  if (sizeBytes > 180_000) {
+    throw new Error(
+      `Imagem muito grande (${Math.round(sizeBytes / 1024)}KB). Limite NVIDIA: 180KB. Reduza a resolução antes de enviar.`,
+    );
+  }
 
-    if (!data.mimeType.startsWith("image/")) {
-      throw new Error("A NVIDIA Vision aceita apenas imagens (PNG/JPG/WEBP). Converta PDFs em imagem antes de enviar.");
-    }
+  const userPrompt = `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda apenas com JSON válido, omitindo campos não encontrados. <img src="data:${data.mimeType};base64,${data.base64}" />`;
 
-    // NVIDIA Llama 3.2 Vision: limite de ~180KB para imagem inline em base64
-    const sizeBytes = Math.floor((data.base64.length * 3) / 4);
-    if (sizeBytes > 180_000) {
-      throw new Error(`Imagem muito grande (${Math.round(sizeBytes / 1024)}KB). Limite NVIDIA: 180KB. Reduza a resolução antes de enviar.`);
-    }
-
-    const userPrompt = `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda apenas com JSON válido, omitindo campos não encontrados. <img src="data:${data.mimeType};base64,${data.base64}" />`;
-
-    const body = {
-      model: MODEL,
+  const res = await fetch(NVIDIA_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      model: NVIDIA_MODEL,
       max_tokens: 1024,
       temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM },
         { role: "user", content: userPrompt },
       ],
-    };
+    }),
+  });
 
-    const res = await fetch(NVIDIA_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    console.error("NVIDIA API error", res.status, txt.slice(0, 500));
+    if (res.status === 401) throw new Error("Chave NVIDIA_API_KEY inválida.");
+    if (res.status === 429) throw new Error("Limite NVIDIA atingido. Tente novamente em instantes.");
+    if (res.status === 402) throw new Error("Créditos NVIDIA esgotados.");
+    throw new Error(`Falha NVIDIA (${res.status}): ${txt.slice(0, 200)}`);
+  }
+
+  const json = await res.json();
+  const content = json?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? parseExtractedJson(content) : {};
+}
+
+async function extractWithGemini(
+  apiKey: string,
+  data: { base64: string; mimeType: string; fileName?: string },
+): Promise<ExtractedDoc> {
+  const res = await fetch(GEMINI_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda APENAS com JSON válido, omitindo campos não encontrados.`,
+            },
+            { inlineData: { mimeType: data.mimeType, data: data.base64 } },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json",
       },
-      body: JSON.stringify(body),
-    });
+    }),
+  });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error("NVIDIA API error", res.status, txt.slice(0, 500));
-      if (res.status === 401) throw new Error("Chave NVIDIA_API_KEY inválida. Gere uma nova em build.nvidia.com.");
-      if (res.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
-      if (res.status === 402) throw new Error("Créditos NVIDIA esgotados.");
-      throw new Error(`Falha na análise IA (${res.status}): ${txt.slice(0, 200)}`);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    console.error("Gemini API error", res.status, txt.slice(0, 500));
+    if (res.status === 401 || res.status === 403) throw new Error("Chave GEMINI_API_KEY inválida.");
+    if (res.status === 429) throw new Error("Limite Gemini atingido. Tente novamente em instantes.");
+    throw new Error(`Falha Gemini (${res.status}): ${txt.slice(0, 200)}`);
+  }
+
+  const json = await res.json();
+  const parts = json?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts.map((p: { text?: string }) => p?.text ?? "").join("")
+    : "";
+  return text ? parseExtractedJson(text) : {};
+}
+
+export const extractDocumentMetadata = createServerFn({ method: "POST" })
+  .inputValidator((d: { base64: string; mimeType: string; fileName?: string }) => {
+    if (!d?.base64 || !d?.mimeType) throw new Error("Arquivo inválido");
+    return d;
+  })
+  .handler(async ({ data }) => {
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const mime = data.mimeType.toLowerCase();
+    const isNvidiaImage = NVIDIA_IMAGE_TYPES.has(mime);
+
+    if (isNvidiaImage) {
+      if (nvidiaKey) {
+        try {
+          return await extractWithNvidia(nvidiaKey, data);
+        } catch (err) {
+          if (!geminiKey) throw err;
+          console.warn("NVIDIA falhou, tentando Gemini como fallback:", (err as Error).message);
+          return await extractWithGemini(geminiKey, data);
+        }
+      }
+      if (geminiKey) return await extractWithGemini(geminiKey, data);
+      throw new Error("Configure NVIDIA_API_KEY (ou GEMINI_API_KEY) para analisar imagens.");
     }
 
-    const json = await res.json();
-    const content = json?.choices?.[0]?.message?.content;
-    return typeof content === "string" ? parseExtractedJson(content) : {};
+    // PDFs e demais documentos → Gemini
+    if (!geminiKey) {
+      throw new Error("GEMINI_API_KEY ausente. Necessária para analisar PDFs e documentos não-imagem.");
+    }
+    return await extractWithGemini(geminiKey, data);
   });
