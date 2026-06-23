@@ -39,7 +39,8 @@ REGRAS:
 - "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.
 - Responda APENAS com um JSON válido, sem markdown e sem explicações.`;
 
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "meta/llama-3.2-90b-vision-instruct";
+const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 function parseExtractedJson(content: string): ExtractedDoc {
   const trimmed = content.trim();
@@ -61,13 +62,15 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente.");
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
 
     const dataUrl = `data:${data.mimeType};base64,${data.base64}`;
 
     const body = {
       model: MODEL,
+      max_tokens: 1024,
+      temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM },
         {
@@ -83,11 +86,12 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
       ],
     };
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch(NVIDIA_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify(body),
     });
