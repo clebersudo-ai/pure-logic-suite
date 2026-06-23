@@ -39,7 +39,8 @@ REGRAS:
 - "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.
 - Responda APENAS com um JSON válido, sem markdown e sem explicações.`;
 
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "meta/llama-3.2-90b-vision-instruct";
+const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 
 function parseExtractedJson(content: string): ExtractedDoc {
   const trimmed = content.trim();
