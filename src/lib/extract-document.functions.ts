@@ -111,44 +111,47 @@ async function extractWithGemini(
   apiKey: string,
   data: { base64: string; mimeType: string; fileName?: string },
 ): Promise<ExtractedDoc> {
-  const res = await fetch(GEMINI_URL(apiKey), {
+  const userPrompt = `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda APENAS com JSON válido, omitindo campos não encontrados.`;
+
+  const res = await fetch(LOVABLE_AI_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Lovable-API-Key": apiKey,
+    },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [
+      model: GEMINI_MODEL,
+      temperature: 0.2,
+      max_tokens: 1024,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM },
         {
           role: "user",
-          parts: [
+          content: [
+            { type: "text", text: userPrompt },
             {
-              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda APENAS com JSON válido, omitindo campos não encontrados.`,
+              type: "image_url",
+              image_url: { url: `data:${data.mimeType};base64,${data.base64}` },
             },
-            { inlineData: { mimeType: data.mimeType, data: data.base64 } },
           ],
         },
       ],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-      },
     }),
   });
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    console.error("Gemini API error", res.status, txt.slice(0, 500));
-    if (res.status === 401 || res.status === 403) throw new Error("Chave GEMINI_API_KEY inválida.");
-    if (res.status === 429) throw new Error("Limite Gemini atingido. Tente novamente em instantes.");
+    console.error("Lovable AI (Gemini) error", res.status, txt.slice(0, 500));
+    if (res.status === 401 || res.status === 403) throw new Error("LOVABLE_API_KEY inválida.");
+    if (res.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
+    if (res.status === 402) throw new Error("Créditos Lovable AI esgotados. Adicione créditos no workspace.");
     throw new Error(`Falha Gemini (${res.status}): ${txt.slice(0, 200)}`);
   }
 
   const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts;
-  const text = Array.isArray(parts)
-    ? parts.map((p: { text?: string }) => p?.text ?? "").join("")
-    : "";
-  return text ? parseExtractedJson(text) : {};
+  const content = json?.choices?.[0]?.message?.content;
+  return typeof content === "string" ? parseExtractedJson(content) : {};
 }
 
 export const extractDocumentMetadata = createServerFn({ method: "POST" })
