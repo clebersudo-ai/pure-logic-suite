@@ -62,13 +62,15 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente.");
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
 
     const dataUrl = `data:${data.mimeType};base64,${data.base64}`;
 
     const body = {
       model: MODEL,
+      max_tokens: 1024,
+      temperature: 0.2,
       messages: [
         { role: "system", content: SYSTEM },
         {
@@ -84,11 +86,12 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
       ],
     };
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch(NVIDIA_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify(body),
     });
