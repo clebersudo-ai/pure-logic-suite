@@ -41,9 +41,8 @@ REGRAS:
 
 const NVIDIA_MODEL = "meta/llama-3.2-90b-vision-instruct";
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_URL = (key: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+const GEMINI_MODEL = "google/gemini-2.5-flash";
+const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 const NVIDIA_IMAGE_TYPES = new Set([
   "image/png", "image/jpeg", "image/jpg", "image/webp",
