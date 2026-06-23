@@ -39,7 +39,7 @@ REGRAS:
 - "observacoes" deve trazer informações relevantes: escopo, classe, restrições, condicionantes, número de inscrição, etc.
 - Responda APENAS com um JSON válido, sem markdown e sem explicações.`;
 
-const NVIDIA_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+const MODEL = "google/gemini-2.5-flash";
 
 function parseExtractedJson(content: string): ExtractedDoc {
   const trimmed = content.trim();
@@ -61,13 +61,13 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const apiKey = process.env.NVIDIA_API_KEY;
-    if (!apiKey) throw new Error("NVIDIA_API_KEY ausente. Gere uma chave gratuita em build.nvidia.com e configure no ambiente.");
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente.");
 
     const dataUrl = `data:${data.mimeType};base64,${data.base64}`;
 
     const body = {
-      model: NVIDIA_MODEL,
+      model: MODEL,
       messages: [
         { role: "system", content: SYSTEM },
         {
@@ -75,37 +75,15 @@ export const extractDocumentMetadata = createServerFn({ method: "POST" })
           content: [
             {
               type: "text",
-              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}.
-
-Formato obrigatório:
-{
-  "tipo_documento": "uma das opções permitidas",
-  "nome": "título oficial",
-  "numero_documento": "número/protocolo quando existir",
-  "orgao_emissor": "órgão emissor",
-  "categoria": "categoria sugerida",
-  "data_emissao": "YYYY-MM-DD",
-  "data_validade": "YYYY-MM-DD",
-  "empresa": "razão social",
-  "cnpj": "00.000.000/0000-00",
-  "uf": "SP",
-  "responsavel": "responsável técnico/legal",
-  "observacoes": "escopo, restrições e condicionantes"
-}
-
-Omita campos não encontrados.`,
+              text: `Extraia os metadados deste documento${data.fileName ? ` (arquivo: ${data.fileName})` : ""}. Responda apenas com JSON válido, omitindo campos não encontrados.`,
             },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
       ],
-      max_tokens: 2048,
-      temperature: 0.1,
-      top_p: 0.7,
-      stream: false,
     };
 
-    const res = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -116,9 +94,9 @@ Omita campos não encontrados.`,
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      if (res.status === 401) throw new Error("Chave NVIDIA inválida ou ausente. Verifique NVIDIA_API_KEY.");
-      if (res.status === 429) throw new Error("Limite gratuito da NVIDIA atingido. Tente novamente em instantes.");
-      throw new Error(`Falha na análise IA NVIDIA (${res.status}): ${txt.slice(0, 200)}`);
+      if (res.status === 429) throw new Error("Limite de requisições atingido. Tente novamente em instantes.");
+      if (res.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos no workspace.");
+      throw new Error(`Falha na análise IA (${res.status}): ${txt.slice(0, 200)}`);
     }
 
     const json = await res.json();
